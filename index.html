@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="author" content="Salah Al-Wafi">
+    <meta name="developer" content="S.W Creative">
+    <title>Pro AI - Salah Al-Wafi Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --primary: #7c3aed; --bg: #030712; }
+        body { margin: 0; font-family: 'Cairo', sans-serif; background: var(--bg); color: white; display: flex; height: 100vh; overflow: hidden; }
+        
+        .sidebar { width: 280px; background: #0f172a; border-left: 1px solid #1f2937; transition: 0.3s; z-index: 60; flex-shrink: 0; }
+        .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 55; backdrop-filter: blur(2px); }
+        .sidebar-overlay.active { display: block; }
+
+        @media (max-width: 1024px) {
+            .sidebar { position: fixed; top: 0; right: -280px; height: 100%; }
+            .sidebar.open { right: 0 !important; }
+        }
+
+        .main-content { flex: 1; display: flex; flex-direction: column; position: relative; min-width: 0; }
+        .chat-container { flex: 1; overflow-y: auto; padding: 20px; scroll-behavior: smooth; display: flex; flex-direction: column; gap: 20px; }
+        
+        .message-user { align-self: flex-end; background: #1e293b; border-radius: 18px 18px 0 18px; max-width: 85%; padding: 12px 16px; border: 1px solid #334155; }
+        .message-ai { align-self: flex-start; background: rgba(124,58,237,0.05); border: 1px solid rgba(124,58,237,0.2); border-radius: 18px 18px 18px 0; max-width: 85%; padding: 12px 16px; line-height: 1.8; color: #e2e8f0; }
+        
+        .input-wrapper { background: #0f172a; border-top: 1px solid #1e293b; padding: 15px; }
+        textarea { resize: none; max-height: 150px; width: 100%; background: transparent; color: #e2e8f0; border: none; outline: none; font-family: 'Cairo'; }
+        
+        .typing-dot { width: 6px; height: 6px; background: var(--primary); border-radius: 50%; display: inline-block; margin: 0 2px; animation: bounce 1.4s infinite ease-in-out both; }
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+        
+        .signature { font-size: 10px; color: #4b5563; text-align: center; padding: 10px; letter-spacing: 1px; }
+    </style>
+</head>
+<body>
+    <div id="overlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+    <aside id="sidebar" class="sidebar flex flex-col">
+        <div class="p-4 border-b border-gray-800 flex justify-between items-center">
+            <button onclick="newChat()" class="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 p-3 rounded-xl font-bold shadow-lg">
+                + محادثة جديدة
+            </button>
+            <button onclick="toggleSidebar()" class="lg:hidden mr-2 text-gray-400 text-2xl">×</button>
+        </div>
+        
+        <div id="historyList" class="p-4 flex-1 overflow-y-auto text-gray-400 text-sm space-y-2">
+            لا توجد محادثات سابقة
+        </div>
+
+        <div class="p-4 border-t border-gray-800 space-y-3">
+            <div class="signature">DESIGNED BY S.W ◈ 2025</div>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <header class="h-16 flex items-center justify-between px-6 bg-gray-900/50 border-b border-gray-800 backdrop-blur-md">
+            <div class="flex items-center gap-3">
+                <button onclick="toggleSidebar()" class="lg:hidden text-2xl text-purple-400">☰</button>
+                <h1 class="text-xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">Pro AI</h1>
+            </div>
+            <div class="flex items-center gap-2 bg-gray-800 p-1 px-3 rounded-full border border-gray-700">
+                <input type="checkbox" id="webToggle" class="accent-purple-500 w-4 h-4 cursor-pointer">
+                <label for="webToggle" class="text-xs text-gray-300 cursor-pointer select-none">بحث مباشر</label>
+            </div>
+        </header>
+
+        <div id="chat-window" class="chat-container">
+            <div id="welcome" class="m-auto text-center opacity-40">
+                <div class="text-6xl mb-4">✨</div>
+                <h2 class="text-2xl font-bold">مرحباً بك في Pro AI</h2>
+                <p class="text-sm mt-2">بواسطة صلاح الوافي</p>
+            </div>
+        </div>
+
+        <div class="input-wrapper">
+            <div class="max-w-4xl mx-auto flex items-end gap-2 bg-gray-900 p-2 rounded-2xl border border-gray-800 shadow-2xl">
+                <button onclick="document.getElementById('pdfInput').click()" class="p-3 text-gray-400 hover:text-purple-400" title="إرفاق PDF">📎</button>
+                <textarea id="userInput" rows="1" placeholder="اسألني عن أي شيء..." oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
+                <button id="sendBtn" onclick="sendMessage()" class="bg-purple-600 hover:bg-purple-500 p-3 rounded-xl transition-all">
+                    ➤
+                </button>
+                <input type="file" id="pdfInput" accept="application/pdf" class="hidden" onchange="handlePdfUpload(this)">
+            </div>
+        </div>
+    </main>
+
+    <script>
+        marked.setOptions({
+            highlight: (code, lang) => hljs.highlightAuto(code).value,
+            breaks: true
+        });
+
+        const chatWindow = document.getElementById("chat-window");
+        const userInput = document.getElementById("userInput");
+        const sendBtn = document.getElementById("sendBtn");
+        const historyList = document.getElementById("historyList");
+        const overlay = document.getElementById("overlay");
+
+        let chatHistory = JSON.parse(localStorage.getItem("chats") || "[]");
+        let currentId = localStorage.getItem("currentChatId") ? parseInt(localStorage.getItem("currentChatId")) : null;
+        let pdfContent = "";
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            overlay.classList.toggle('active');
+        }
+
+        function saveChats() {
+            localStorage.setItem("chats", JSON.stringify(chatHistory));
+            localStorage.setItem("currentChatId", currentId);
+        }
+
+        function newChat() {
+            const id = Date.now();
+            chatHistory.unshift({ id, title: "محادثة جديدة", messages: [] });
+            currentId = id;
+            saveChats();
+            renderHistory();
+            renderChat();
+            if (window.innerWidth < 1024) toggleSidebar();
+        }
+
+        function renderHistory() {
+            historyList.innerHTML = chatHistory.length ? "" : '<div class="text-center opacity-40">لا توجد محادثات</div>';
+            chatHistory.forEach(c => {
+                const d = document.createElement("div");
+                d.className = `p-3 rounded-lg cursor-pointer transition-all flex justify-between items-center group ${c.id === currentId ? "bg-purple-600/20 text-white border border-purple-500/30" : "hover:bg-gray-800 text-gray-400"}`;
+                d.innerHTML = `<span class="truncate flex-1">${c.title}</span><button class="opacity-0 group-hover:opacity-100 text-red-500 px-2" onclick="deleteChat(event, ${c.id})">×</button>`;
+                d.onclick = () => { currentId = c.id; saveChats(); renderHistory(); renderChat(); if (window.innerWidth < 1024) toggleSidebar(); };
+                historyList.appendChild(d);
+            });
+        }
+
+        function deleteChat(e, id) {
+            e.stopPropagation();
+            chatHistory = chatHistory.filter(c => c.id !== id);
+            if (currentId === id) currentId = chatHistory.length ? chatHistory[0].id : null;
+            saveChats(); renderHistory(); renderChat();
+        }
+
+        function renderChat() {
+            chatWindow.innerHTML = "";
+            const chat = chatHistory.find(c => c.id === currentId);
+            if (!chat || !chat.messages.length) {
+                chatWindow.innerHTML = `<div class="m-auto text-center opacity-40"><div class="text-6xl mb-4">🚀</div><h2 class="text-2xl font-bold">أهلاً بك، كيف أساعدك؟</h2></div>`;
+                return;
+            }
+            chat.messages.forEach(m => addMessageUI(m.role, m.content));
+        }
+
+        function addMessageUI(role, text) {
+            const div = document.createElement("div");
+            div.className = role === "user" ? "message-user" : "message-ai";
+            if (role === "ai") {
+                div.innerHTML = marked.parse(text);
+                div.querySelectorAll('pre code').forEach(b => hljs.highlightElement(b));
+            } else {
+                div.textContent = text;
+            }
+            chatWindow.appendChild(div);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+            return div;
+        }
+
+        async function handlePdfUpload(input) {
+            const file = input.files[0];
+            if (!file) return;
+            const status = addMessageUI("ai", "جاري قراءة الملف...");
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+                let text = "";
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const content = await page.getTextContent();
+                    text += content.items.map(item => item.str).join(" ") + " ";
+                }
+                pdfContent = text;
+                status.innerHTML = "✅ تم تحميل PDF. اسألني عنه الآن.";
+            } catch (e) { status.innerHTML = "❌ خطأ في الملف."; }
+        }
+
+        async function sendMessage() {
+            const text = userInput.value.trim();
+            if (!text && !pdfContent) return;
+            if (!currentId) newChat();
+
+            const chat = chatHistory.find(c => c.id === currentId);
+            if (!chat.messages.length) chat.title = text.substring(0, 25);
+
+            chat.messages.push({ role: "user", content: text });
+            addMessageUI("user", text);
+            userInput.value = "";
+            sendBtn.disabled = true;
+
+            const loading = addMessageUI("ai", '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>');
+
+            try {
+                const res = await fetch("/.netlify/functions/chat", { 
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        model: "llama-3.3-70b-versatile",
+                        messages: [
+                            { role: "system", content: "أنت Pro AI، مساعد ذكي طوره صلاح الوافي." },
+                            ...chat.messages.map(m => ({
+                                role: m.role === "ai" ? "assistant" : "user",
+                                content: m.content
+                            }))
+                        ],
+                        temperature: 0.7
+                    })
+                });
+
+                const data = await res.json();
+                loading.remove();
+                
+                if (data.choices && data.choices[0]) {
+                    const reply = data.choices[0].message.content;
+                    chat.messages.push({ role: "ai", content: reply });
+                    addMessageUI("ai", reply);
+                    saveChats();
+                } else {
+                    throw new Error("استجابة غير صالحة");
+                }
+            } catch (e) {
+                loading.innerHTML = "❌ عذراً، حدث خطأ في الاتصال بالسيرفر. تأكد من إعداد المفتاح في Netlify.";
+                console.error("Error details:", e);
+            } finally {
+                sendBtn.disabled = false;
+            }
+        }
+
+        userInput.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } };
+        renderHistory();
+        renderChat();
+    </script>
+</body>
+</html>
