@@ -1,9 +1,10 @@
-const axios = require('axios');
-
 exports.handler = async (event, context) => {
   // السماح بطلبات POST فقط
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
+    return { 
+      statusCode: 405, 
+      body: JSON.stringify({ error: 'Method Not Allowed' }) 
+    };
   }
 
   try {
@@ -13,35 +14,46 @@ exports.handler = async (event, context) => {
     if (!apiKey) {
       return {
         statusCode: 500,
-        body: JSON.stringify({ error: 'GROQ_API_KEY is not configured' }),
+        body: JSON.stringify({ error: 'GROQ_API_KEY is not configured in Netlify environment variables' }),
       };
     }
 
-    const response = await axios.post(
-      'https://api.groq.com/openai/v1/chat/completions',
-      {
+    // استخدام fetch المدمجة في Node.js 18+ بدلاً من axios
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
         model: model || 'llama-3.3-70b-versatile',
         messages: messages,
         temperature: temperature || 0.7,
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return {
+        statusCode: response.status,
+        body: JSON.stringify({
+          error: 'Groq API error',
+          details: data
+        }),
+      };
+    }
 
     return {
       statusCode: 200,
-      body: JSON.stringify(response.data),
+      body: JSON.stringify(data),
     };
   } catch (error) {
-    console.error('Error calling Groq API:', error);
+    console.error('Error in chat function:', error);
     return {
-      statusCode: error.response ? error.response.status : 500,
+      statusCode: 500,
       body: JSON.stringify({
-        error: 'Failed to fetch from Groq API',
+        error: 'Internal Server Error',
         details: error.message,
       }),
     };
