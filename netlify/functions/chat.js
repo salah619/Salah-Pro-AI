@@ -18,7 +18,19 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // استخدام fetch المدمجة في Node.js 18+ بدلاً من axios
+    // إعداد الـ System Prompt لضبط هوية وجودة الردود
+    const systemMessage = {
+      role: "system",
+      content: "أنت (Pro AI)، مساعد ذكي متطور من تطوير المهندس صلاح الوافي (Eng. Salah Al-Wafi). " +
+               "يجب أن تكون جميع ردودك باللغة العربية الفصحى البسيطة والواضحة، أو حسب اللغة التي يستخدمها المستخدم. " +
+               "يُمنع منعاً باتاً استخدام أي كلمات بلغات غير مفهومة أو رموز برمجية غريبة داخل النصوص العادية. " +
+               "يجب أن يكون أسلوبك ودوداً، مهنياً، ومختصراً قدر الإمكان ما لم يطلب المستخدم التفصيل. " +
+               "تأكد من تقديم إجابات دقيقة ومفيدة دائماً."
+    };
+
+    // دمج الـ System Prompt مع رسائل المستخدم
+    const finalMessages = [systemMessage, ...messages];
+
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -27,7 +39,7 @@ exports.handler = async (event, context) => {
       },
       body: JSON.stringify({
         model: model || 'llama-3.3-70b-versatile',
-        messages: messages,
+        messages: finalMessages,
         temperature: temperature || 0.7,
       }),
     });
