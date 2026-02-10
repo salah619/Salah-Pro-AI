@@ -226,10 +226,18 @@
                 };
 
                 recognition.onresult = (event) => {
-                    const transcript = event.results[0][0].transcript;
-                    userInput.value += (userInput.value ? ' ' : '') + transcript;
+                    let transcript = '';
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        transcript += event.results[i][0].transcript;
+                        if (event.results[i].isFinal) {
+                            transcript += ' ';
+                        }
+                    }
+                    userInput.value += transcript;
                     userInput.style.height = 'auto';
                     userInput.style.height = userInput.scrollHeight + 'px';
+                    console.log('Transcript added:', transcript);
+                    console.log('Current input value:', userInput.value);
                 };
 
                 recognition.onerror = (event) => {
