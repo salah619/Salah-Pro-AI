@@ -254,21 +254,49 @@
             let currentId = localStorage.getItem("currentChatId") ? parseInt(localStorage.getItem("currentChatId")) : null;
             let pdfContent = "";
 
-            // 1. Speech Synthesis Implementation
+            // 1. Speech Synthesis Implementation with Toggle
+            let currentSpeakingBtn = null;
+            let isSpeaking = false;
+            
             window.speakText = (text, btn) => {
-                window.speechSynthesis.cancel(); // Stop any current speech
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.lang = 'ar-SA';
-                utterance.rate = 1.0;
-                
-                btn.textContent = '🔊';
-                utterance.onend = () => { btn.textContent = '🔈'; };
-                utterance.onerror = () => { btn.textContent = '🔈'; };
-                
-                window.speechSynthesis.speak(utterance);
+                if (isSpeaking && currentSpeakingBtn === btn) {
+                    // Stop current speech
+                    window.speechSynthesis.cancel();
+                    isSpeaking = false;
+                    btn.textContent = '🔈';
+                    currentSpeakingBtn = null;
+                } else {
+                    // Stop any previous speech
+                    if (currentSpeakingBtn) {
+                        currentSpeakingBtn.textContent = '🔈';
+                    }
+                    window.speechSynthesis.cancel();
+                    
+                    // Start new speech
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.lang = 'ar-SA';
+                    utterance.rate = 1.0;
+                    
+                    btn.textContent = '⏸️';
+                    isSpeaking = true;
+                    currentSpeakingBtn = btn;
+                    
+                    utterance.onend = () => {
+                        btn.textContent = '🔈';
+                        isSpeaking = false;
+                        currentSpeakingBtn = null;
+                    };
+                    utterance.onerror = () => {
+                        btn.textContent = '🔈';
+                        isSpeaking = false;
+                        currentSpeakingBtn = null;
+                    };
+                    
+                    window.speechSynthesis.speak(utterance);
+                }
             };
 
-            // 2. PDF Export Implementation
+            // 2. PDF Export Implementation - Fixed
             window.downloadPDF = () => {
                 const chat = chatHistory.find(c => c.id === currentId);
                 if (!chat || !chat.messages.length) {
@@ -276,32 +304,49 @@
                     return;
                 }
 
-                const template = document.getElementById('pdf-template');
-                template.innerHTML = `
-                    <div class="pdf-header">
-                        <h1 style="color: #7c3aed; margin: 0;">تقرير محادثة Pro AI</h1>
-                        <p style="color: #666; font-size: 12px;">بواسطة صلاح الوافي | التاريخ: ${new Date().toLocaleDateString('ar-SA')}</p>
-                    </div>
-                    <div id="pdf-body"></div>
+                // Create a proper HTML structure for PDF
+                const pdfContent = document.createElement('div');
+                pdfContent.style.cssText = 'padding: 40px; color: black; background: white; font-family: Cairo, sans-serif; direction: rtl; line-height: 1.8;';
+                
+                // Add header
+                const header = document.createElement('div');
+                header.style.cssText = 'border-bottom: 3px solid #7c3aed; padding-bottom: 20px; margin-bottom: 30px; text-align: center;';
+                header.innerHTML = `
+                    <h1 style="color: #7c3aed; margin: 0 0 10px 0; font-size: 24px;">سجل محادثة Pro AI</h1>
+                    <p style="color: #333; font-size: 14px; margin: 5px 0;">المهندس صلاح الوافي</p>
+                    <p style="color: #666; font-size: 12px; margin: 5px 0;">التاريخ: ${new Date().toLocaleDateString('ar-SA')}</p>
                 `;
-
-                const body = template.querySelector('#pdf-body');
-                chat.messages.forEach(m => {
-                    const div = document.createElement('div');
-                    div.className = `pdf-msg ${m.role === 'user' ? 'pdf-user' : 'pdf-ai'}`;
-                    div.innerHTML = `<strong>${m.role === 'user' ? 'أنت' : 'Pro AI'}:</strong><br>${m.content}`;
-                    body.appendChild(div);
+                pdfContent.appendChild(header);
+                
+                // Add messages
+                const body = document.createElement('div');
+                chat.messages.forEach((m, idx) => {
+                    const msgDiv = document.createElement('div');
+                    msgDiv.style.cssText = `margin-bottom: 20px; padding: 15px; border-radius: 8px; ${m.role === 'user' ? 'background: #f0f0f0; border-right: 4px solid #3b82f6;' : 'background: #f3f0ff; border-right: 4px solid #7c3aed;'}`;
+                    msgDiv.innerHTML = `
+                        <strong style="color: ${m.role === 'user' ? '#1f2937' : '#7c3aed'}; font-size: 14px;">${m.role === 'user' ? '👤 أنت' : '🤖 Pro AI'}:</strong>
+                        <p style="margin: 10px 0 0 0; color: #1f2937; font-size: 13px;">${m.content}</p>
+                    `;
+                    body.appendChild(msgDiv);
                 });
-
+                pdfContent.appendChild(body);
+                
+                // Add footer
+                const footer = document.createElement('div');
+                footer.style.cssText = 'border-top: 1px solid #ddd; padding-top: 20px; margin-top: 30px; text-align: center; color: #999; font-size: 11px;';
+                footer.innerHTML = `تم إنشاء هذا التقرير بواسطة Pro AI | ${new Date().toLocaleString('ar-SA')}`;
+                pdfContent.appendChild(footer);
+                
+                // Generate PDF with proper options
                 const opt = {
-                    margin: 10,
-                    filename: `تقرير_محادثة_${chat.title.substring(0,10)}.pdf`,
+                    margin: [10, 10, 10, 10],
+                    filename: `سجل_محادثة_${chat.title.substring(0, 15)}_${Date.now()}.pdf`,
                     image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: { scale: 2 },
-                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                    html2canvas: { scale: 2, logging: true, useCORS: true, backgroundColor: '#ffffff' },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true }
                 };
-
-                html2pdf().from(template).set(opt).save();
+                
+                html2pdf().set(opt).from(pdfContent).save();
             };
 
             // 3. Clear Chat Implementation
