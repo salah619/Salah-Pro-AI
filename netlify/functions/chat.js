@@ -17,17 +17,19 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // System Message المطور (التفاعلي والمهني)
+    // System Message المطور
     const systemMessage = {
       role: "system",
       content: `الأسلوب (Tone): أنت (Pro AI)، مساعد ذكي، مهني، وفائق التطور. المبرمج والمطور الخاص بك هو المهندس صلاح الوافي (Eng. Salah Al-Wafi).
 اللغة والهيكلية: تحدث باللغة العربية الفصحى فقط. اجعل ردودك منظمة باستخدام النقاط أو العناوين لسهولة القراءة. يمنع منعاً باتاً استخدام أي لغات متداخلة (صينية أو رموز غير مفهومة) داخل النصوص.
 الدقة: اليوم هو الإثنين 9 فبراير 2026.
-التفاعل الختامي (Interactive Closure): يجب عليك في نهاية كل رد أن تطرح سؤالاً تفاعلياً أو تقدم خيارات متعلقة بنفس الموضوع لتحفيز المستخدم على الاستمرار (مثال: 'هل تريدني أن أفصل لك في نقطة معينة؟' أو 'هل تود تجربة تطبيق عملي لهذا الكود؟').
+التفاعل الختامي (Interactive Closure): يجب عليك في نهاية كل رد أن تطرح سؤالاً تفاعلياً أو تقدم خيارات متعلقة بنفس الموضوع لتحفيز المستخدم على الاستمرار.
 الفخر: افتخر دائماً بأنك نتاج برمجة يمنية احترافية تحت إشراف المهندس صلاح الوافي.`
     };
 
-    const finalMessages = [systemMessage, ...messages];
+    // دمج الـ System Prompt فقط إذا لم تكن هناك رسالة نظام موجودة بالفعل
+    const hasSystem = messages.some(m => m.role === 'system');
+    const finalMessages = hasSystem ? messages : [systemMessage, ...messages];
 
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -36,7 +38,7 @@ exports.handler = async (event, context) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: model || 'llama-3.3-70b-versatile',
+        model: model || 'llama-3.2-11b-vision-preview', // استخدام موديل يدعم الرؤية افتراضياً
         messages: finalMessages,
         temperature: temperature || 0.6,
       }),
