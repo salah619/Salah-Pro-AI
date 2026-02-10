@@ -30,10 +30,11 @@
         .chat-container { flex: 1; overflow-y: auto; padding: 20px; scroll-behavior: smooth; display: flex; flex-direction: column; gap: 20px; contain: content; padding-bottom: 40px; }
         .message-user { align-self: flex-end; background: #1e293b; border-radius: 18px 18px 0 18px; max-width: 85%; padding: 12px 16px; border: 1px solid #334155; position: relative; }
         .message-ai { align-self: flex-start; background: rgba(124,58,237,0.05); border: 1px solid rgba(124,58,237,0.2); border-radius: 18px 18px 18px 0; max-width: 85%; padding: 12px 16px; line-height: 1.8; color: #e2e8f0; position: relative; }
-        .msg-controls { display: flex; gap: 12px; margin-top: 8px; padding-top: 4px; }
-        .msg-btn { font-size: 14px; cursor: pointer; color: #7c3aed; opacity: 0.6; transition: all 0.2s; display: flex; align-items: center; gap: 4px; background: rgba(124,58,237,0.1); padding: 2px 8px; border-radius: 6px; }
-        .msg-btn:hover { opacity: 1; background: rgba(124,58,237,0.2); }
-        .msg-btn.copied { color: #10b981; background: rgba(16, 185, 129, 0.1); }
+        .msg-actions { display: flex; gap: 8px; margin-top: 10px; opacity: 0.6; transition: opacity 0.2s; }
+        .msg-actions:hover { opacity: 1; }
+        .msg-btn { font-size: 14px; cursor: pointer; color: #7c3aed; padding: 4px 8px; border-radius: 6px; background: rgba(124,58,237,0.1); transition: all 0.2s; }
+        .msg-btn:hover { background: rgba(124,58,237,0.2); }
+        .msg-btn.copied { color: #10b981; background: rgba(16,185,129,0.1); }
         .input-wrapper { background: #0f172a; border-top: 1px solid #1e293b; padding: 15px; position: sticky; bottom: 0; width: 100%; z-index: 50; }
         textarea { resize: none; max-height: 150px; width: 100%; background: transparent; color: #e2e8f0; border: none; outline: none; font-family: 'Cairo'; }
         .typing-dot { width: 6px; height: 6px; background: var(--primary); border-radius: 50%; display: inline-block; margin: 0 2px; animation: bounce 1.4s infinite ease-in-out both; }
@@ -43,9 +44,6 @@
         @keyframes pulse-red { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
         .action-btn { background: rgba(31, 41, 55, 0.8); border: 1px solid #374151; color: #9ca3af; padding: 6px 12px; border-radius: 8px; font-size: 12px; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
         .action-btn:hover { background: #374151; color: white; }
-        #preview-container { display: none; margin-bottom: 10px; position: relative; width: fit-content; }
-        #image-preview { max-height: 100px; border-radius: 8px; border: 1px solid #374151; }
-        .remove-preview { position: absolute; top: -8px; right: -8px; background: #ef4444; color: white; border-radius: 50%; width: 20px; height: 20px; display: flex; items-center; justify-center; font-size: 12px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -82,18 +80,12 @@
         </div>
 
         <div class="input-wrapper">
-            <div class="max-w-4xl mx-auto">
-                <div id="preview-container">
-                    <img id="image-preview" src="" alt="Preview">
-                    <div class="remove-preview" onclick="clearPreview()">×</div>
-                </div>
-                <div class="flex items-end gap-2 bg-gray-900 p-2 rounded-2xl border border-gray-800 shadow-2xl">
-                    <button onclick="document.getElementById('fileInput').click()" class="p-3 text-gray-400 hover:text-purple-400" title="إرفاق ملف أو صورة">📎</button>
-                    <textarea id="userInput" rows="1" placeholder="اسألني عن أي شيء..." oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
-                    <button id="voiceBtn" class="p-3 text-gray-400 hover:text-purple-400 transition-all" title="إدخال صوتي">🎤</button>
-                    <button id="sendBtn" onclick="sendMessage()" class="bg-purple-600 hover:bg-purple-500 p-3 rounded-xl transition-all active:scale-90">➤</button>
-                    <input type="file" id="fileInput" accept="image/*,application/pdf" class="hidden" onchange="handleFileUpload(this)">
-                </div>
+            <div class="max-w-4xl mx-auto flex items-end gap-2 bg-gray-900 p-2 rounded-2xl border border-gray-800 shadow-2xl">
+                <button onclick="document.getElementById('pdfInput').click()" class="p-3 text-gray-400 hover:text-purple-400" title="إرفاق PDF">📎</button>
+                <textarea id="userInput" rows="1" placeholder="اسألني عن أي شيء..." oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
+                <button id="voiceBtn" class="p-3 text-gray-400 hover:text-purple-400 transition-all" title="إدخال صوتي">🎤</button>
+                <button id="sendBtn" onclick="sendMessage()" class="bg-purple-600 hover:bg-purple-500 p-3 rounded-xl transition-all active:scale-90">➤</button>
+                <input type="file" id="pdfInput" accept="application/pdf" class="hidden" onchange="handlePdfUpload(this)">
             </div>
         </div>
     </main>
@@ -110,113 +102,174 @@
             const voiceBtn = document.getElementById("voiceBtn");
             const historyList = document.getElementById("historyList");
             const overlay = document.getElementById("overlay");
-            const previewContainer = document.getElementById("preview-container");
-            const imagePreview = document.getElementById("image-preview");
 
             let chatHistory = JSON.parse(localStorage.getItem("chats") || "[]");
             let currentId = localStorage.getItem("currentChatId") ? parseInt(localStorage.getItem("currentChatId")) : null;
-            let attachedFile = null; // { type: 'image'|'pdf', data: base64|text, name: string }
+            let pdfContent = "";
 
+            // 1. Speech Synthesis
+            let currentSpeakingBtn = null;
+            let isSpeaking = false;
             window.speakText = (text, btn) => {
-                window.speechSynthesis.cancel();
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.lang = 'ar-SA';
-                btn.innerHTML = '⏸️ توقف';
-                utterance.onend = () => btn.innerHTML = '🔈 صوت';
-                window.speechSynthesis.speak(utterance);
+                if (isSpeaking && currentSpeakingBtn === btn) {
+                    window.speechSynthesis.cancel();
+                    isSpeaking = false;
+                    btn.innerHTML = '🔈';
+                    currentSpeakingBtn = null;
+                } else {
+                    if (currentSpeakingBtn) currentSpeakingBtn.innerHTML = '🔈';
+                    window.speechSynthesis.cancel();
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.lang = 'ar-SA';
+                    btn.innerHTML = '⏸️';
+                    isSpeaking = true;
+                    currentSpeakingBtn = btn;
+                    utterance.onend = () => { btn.innerHTML = '🔈'; isSpeaking = false; currentSpeakingBtn = null; };
+                    window.speechSynthesis.speak(utterance);
+                }
             };
 
+            // 2. Copy Text
             window.copyText = async (text, btn) => {
-                await navigator.clipboard.writeText(text);
-                btn.innerHTML = '✅ تم النسخ';
-                setTimeout(() => btn.innerHTML = '📋 نسخ', 2000);
+                try {
+                    await navigator.clipboard.writeText(text);
+                    const old = btn.innerHTML;
+                    btn.innerHTML = '✅ تم النسخ';
+                    btn.classList.add('copied');
+                    setTimeout(() => { btn.innerHTML = old; btn.classList.remove('copied'); }, 2000);
+                } catch (e) { alert('فشل النسخ'); }
             };
 
-            window.clearPreview = () => {
-                attachedFile = null;
-                previewContainer.style.display = 'none';
-                imagePreview.src = "";
-                document.getElementById('fileInput').value = "";
+            // 3. PDF Export
+            window.downloadPDF = () => {
+                const chat = chatHistory.find(c => c.id === currentId);
+                if (!chat || !chat.messages.length) return alert("لا توجد محادثة!");
+                const container = document.createElement('div');
+                container.style.cssText = 'padding: 40px; color: black; background: white; font-family: Cairo, sans-serif; direction: rtl;';
+                container.innerHTML = `<div style="border-bottom: 3px solid #7c3aed; padding-bottom: 20px; margin-bottom: 30px; text-align: center;">
+                    <h1 style="color: #7c3aed; margin: 0; font-size: 24px;">سجل محادثة Pro AI</h1>
+                    <p style="color: #666; font-size: 12px;">التاريخ: ${new Date().toLocaleDateString('ar-SA')}</p>
+                </div><div id="pdf-body"></div>
+                <div style="border-top: 1px solid #ddd; padding-top: 20px; margin-top: 30px; text-align: center; color: #666; font-size: 12px;">
+                    <div>تم إنشاء هذا التقرير بواسطة <span style="direction: ltr; unicode-bidi: embed; display: inline-block; font-weight: bold;">Pro AI</span></div>
+                    <div style="margin-top: 5px; font-weight: bold; color: #333;">ENG. SALAH AL-WAFI</div>
+                </div>`;
+                const body = container.querySelector('#pdf-body');
+                chat.messages.forEach(m => {
+                    const div = document.createElement('div');
+                    div.style.cssText = `margin-bottom: 20px; padding: 15px; border-radius: 8px; ${m.role === 'user' ? 'background: #f0f0f0; border-right: 4px solid #3b82f6;' : 'background: #f3f0ff; border-right: 4px solid #7c3aed;'}`;
+                    const name = m.role === 'user' ? '👤 أنت' : '<span style="direction: ltr; unicode-bidi: embed; display: inline-block;">Pro AI</span> 🤖';
+                    div.innerHTML = `<div style="font-weight: bold; margin-bottom: 8px;">${name}</div><div style="font-size: 13px;">${m.content}</div>`;
+                    body.appendChild(div);
+                });
+                html2pdf().set({ margin: 10, filename: 'سجل_محادثة.pdf', html2canvas: { scale: 2 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } }).from(container).save();
             };
 
-            window.handleFileUpload = async (input) => {
+            // 4. Clear Chat
+            window.clearCurrentChat = () => {
+                if (confirm("مسح المحادثة؟")) {
+                    const chat = chatHistory.find(c => c.id === currentId);
+                    if (chat) { chat.messages = []; saveChats(); renderChat(); }
+                }
+            };
+
+            // 5. Voice Input
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (SpeechRecognition) {
+                const rec = new SpeechRecognition();
+                rec.lang = 'ar-SA';
+                let active = false;
+                voiceBtn.onclick = () => active ? rec.stop() : rec.start();
+                rec.onstart = () => { active = true; voiceBtn.classList.add('mic-active'); userInput.placeholder = "جاري الاستماع..."; };
+                rec.onend = () => { active = false; voiceBtn.classList.remove('mic-active'); userInput.placeholder = "اسألني عن أي شيء..."; };
+                rec.onresult = (e) => { userInput.value += e.results[0][0].transcript; userInput.style.height = 'auto'; userInput.style.height = userInput.scrollHeight + 'px'; };
+            }
+
+            // Chat Core
+            window.toggleSidebar = () => { document.getElementById('sidebar').classList.toggle('open'); overlay.classList.toggle('active'); };
+            const saveChats = () => { localStorage.setItem("chats", JSON.stringify(chatHistory)); localStorage.setItem("currentChatId", currentId); };
+            window.newChat = () => { const id = Date.now(); chatHistory.unshift({ id, title: "محادثة جديدة", messages: [] }); currentId = id; saveChats(); renderHistory(); renderChat(); if (window.innerWidth < 1024) toggleSidebar(); };
+            
+            const renderHistory = () => {
+                historyList.innerHTML = chatHistory.length ? "" : '<div class="text-center opacity-40">لا توجد محادثات</div>';
+                chatHistory.forEach(c => {
+                    const d = document.createElement("div");
+                    d.className = `p-3 rounded-lg cursor-pointer transition-all flex justify-between items-center group ${c.id === currentId ? "bg-purple-600/20 text-white border border-purple-500/30" : "hover:bg-gray-800 text-gray-400"}`;
+                    d.innerHTML = `<span class="truncate flex-1">${c.title}</span><button class="opacity-0 group-hover:opacity-100 text-red-500 px-2" onclick="deleteChat(event, ${c.id})">×</button>`;
+                    d.onclick = () => { currentId = c.id; saveChats(); renderHistory(); renderChat(); if (window.innerWidth < 1024) toggleSidebar(); };
+                    historyList.appendChild(d);
+                });
+            };
+
+            window.deleteChat = (e, id) => { e.stopPropagation(); chatHistory = chatHistory.filter(c => c.id !== id); if (currentId === id) currentId = chatHistory.length ? chatHistory[0].id : null; saveChats(); renderHistory(); renderChat(); };
+
+            const renderChat = () => {
+                chatWindow.innerHTML = "";
+                const chat = chatHistory.find(c => c.id === currentId);
+                if (!chat || !chat.messages.length) { chatWindow.innerHTML = `<div class="m-auto text-center opacity-40"><div class="text-6xl mb-4">🚀</div><h2 class="text-2xl font-bold">أهلاً بك، كيف أساعدك؟</h2></div>`; return; }
+                chat.messages.forEach(m => addMessageUI(m.role, m.content));
+            };
+
+            const addMessageUI = (role, text) => {
+                const div = document.createElement("div");
+                div.className = role === "user" ? "message-user" : "message-ai";
+                if (role === "ai") {
+                    const clean = text.replace(/<\/?[^>]+(>|$)/g, "");
+                    div.innerHTML = `<div class="msg-content">${typeof marked !== 'undefined' ? marked.parse(text) : text}</div>
+                        <div class="msg-actions">
+                            <span class="msg-btn" onclick="speakText(\`${clean.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`, this)">🔈</span>
+                            <span class="msg-btn" onclick="copyText(\`${text.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`, this)">📋</span>
+                        </div>`;
+                    if (typeof hljs !== 'undefined') div.querySelectorAll('pre code').forEach(b => hljs.highlightElement(b));
+                } else { div.textContent = text; }
+                chatWindow.appendChild(div);
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+                return div;
+            };
+
+            window.handlePdfUpload = async (input) => {
                 const file = input.files[0];
                 if (!file) return;
-
+                const status = addMessageUI("ai", "جاري قراءة PDF...");
                 try {
-                    if (file.type.startsWith('image/')) {
-                        const reader = new FileReader();
-                        reader.onload = (e) => {
-                            attachedFile = { type: 'image', data: e.target.result.split(',')[1], mimeType: file.type, name: file.name };
-                            imagePreview.src = e.target.result;
-                            previewContainer.style.display = 'block';
-                        };
-                        reader.readAsDataURL(file);
-                    } else if (file.type === 'application/pdf') {
-                        const arrayBuffer = await file.arrayBuffer();
-                        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-                        const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
-                        let text = "";
-                        for (let i = 1; i <= pdf.numPages; i++) {
-                            const page = await pdf.getPage(i);
-                            const content = await page.getTextContent();
-                            text += content.items.map(item => item.str).join(" ") + " ";
-                        }
-                        attachedFile = { type: 'pdf', data: text, name: file.name };
-                        alert("✅ تم تحميل ملف PDF بنجاح.");
+                    const buffer = await file.arrayBuffer();
+                    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                    const pdf = await pdfjsLib.getDocument({data: buffer}).promise;
+                    let text = "";
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const content = await page.getTextContent();
+                        text += content.items.map(item => item.str).join(" ") + " ";
                     }
-                } catch (e) { alert("❌ خطأ في معالجة الملف."); }
+                    pdfContent = text;
+                    status.innerHTML = "✅ تم تحميل PDF بنجاح.";
+                } catch (e) { status.innerHTML = "❌ خطأ في الملف."; }
             };
 
             window.sendMessage = async () => {
                 const text = userInput.value.trim();
-                if (!text && !attachedFile) return;
+                if (!text && !pdfContent) return;
                 if (!currentId) newChat();
-
                 const chat = chatHistory.find(c => c.id === currentId);
-                chat.messages.push({ role: "user", content: text, file: attachedFile });
-                
-                const userMsgDiv = document.createElement("div");
-                userMsgDiv.className = "message-user";
-                if (attachedFile && attachedFile.type === 'image') {
-                    userMsgDiv.innerHTML = `<img src="data:${attachedFile.mimeType};base64,${attachedFile.data}" class="max-w-full rounded-lg mb-2"><p>${text}</p>`;
-                } else {
-                    userMsgDiv.textContent = text;
-                }
-                chatWindow.appendChild(userMsgDiv);
-                
-                const currentAttached = attachedFile;
+                if (!chat.messages.length) chat.title = text.substring(0, 25);
+                chat.messages.push({ role: "user", content: text });
+                addMessageUI("user", text);
                 userInput.value = "";
                 userInput.style.height = 'auto';
-                clearPreview();
                 sendBtn.disabled = true;
-                chatWindow.scrollTop = chatWindow.scrollHeight;
-
                 const loading = addMessageUI("ai", '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>');
-
                 try {
-                    const payload = {
-                        model: "llama-3.2-11b-vision-preview",
-                        messages: chat.messages.map(m => {
-                            if (m.role === 'user' && m.file && m.file.type === 'image') {
-                                return {
-                                    role: "user",
-                                    content: [
-                                        { type: "text", text: m.content || "حلل هذه الصورة" },
-                                        { type: "image_url", image_url: { url: `data:${m.file.mimeType};base64,${m.file.data}` } }
-                                    ]
-                                };
-                            }
-                            return { role: m.role === 'ai' ? 'assistant' : 'user', content: m.role === 'user' && m.file && m.file.type === 'pdf' ? `[سياق PDF: ${m.file.data}]\n\n${m.content}` : m.content };
-                        })
-                    };
-
                     const res = await fetch("/.netlify/functions/chat", { 
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(payload)
+                        body: JSON.stringify({
+                            model: "llama-3.3-70b-versatile",
+                            messages: [
+                                { role: "system", content: "أنت Pro AI، مساعد ذكي طوره صلاح الوافي." },
+                                ...chat.messages.map(m => ({ role: m.role === "ai" ? "assistant" : "user", content: m.content }))
+                            ]
+                        })
                     });
-
                     const data = await res.json();
                     loading.remove();
                     if (data.choices && data.choices[0]) {
@@ -225,62 +278,9 @@
                         addMessageUI("ai", reply);
                         saveChats();
                     } else { throw new Error(); }
-                } catch (e) { loading.innerHTML = "❌ خطأ في الاتصال بالسيرفر."; } finally { sendBtn.disabled = false; }
+                } catch (e) { loading.innerHTML = "❌ خطأ في الاتصال. تأكد من إعدادات API."; } finally { sendBtn.disabled = false; }
             };
 
-            const addMessageUI = (role, text) => {
-                const div = document.createElement("div");
-                div.className = role === "user" ? "message-user" : "message-ai";
-                if (role === "ai") {
-                    const cleanText = text.replace(/<\/?[^>]+(>|$)/g, ""); 
-                    div.innerHTML = `<div class="msg-content">${marked.parse(text)}</div><div class="msg-controls"><button class="msg-btn" onclick="speakText(\`${cleanText.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`, this)">🔈 صوت</button><button class="msg-btn" onclick="copyText(\`${text.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`, this)">📋 نسخ</button></div>`;
-                } else { div.textContent = text; }
-                chatWindow.appendChild(div);
-                chatWindow.scrollTop = chatWindow.scrollHeight;
-                return div;
-            };
-
-            window.newChat = () => {
-                const id = Date.now();
-                chatHistory.unshift({ id, title: "محادثة جديدة", messages: [] });
-                currentId = id;
-                saveChats(); renderHistory(); renderChat();
-            };
-
-            const renderHistory = () => {
-                historyList.innerHTML = chatHistory.length ? "" : '<div class="text-center opacity-40">لا توجد محادثات</div>';
-                chatHistory.forEach(c => {
-                    const d = document.createElement("div");
-                    d.className = `p-3 rounded-lg cursor-pointer transition-all flex justify-between items-center group ${c.id === currentId ? "bg-purple-600/20 text-white border border-purple-500/30" : "hover:bg-gray-800 text-gray-400"}`;
-                    d.innerHTML = `<span class="truncate flex-1">${c.title || "محادثة"}</span><button class="opacity-0 group-hover:opacity-100 text-red-500 px-2" onclick="deleteChat(event, ${c.id})">×</button>`;
-                    d.onclick = () => { currentId = c.id; saveChats(); renderHistory(); renderChat(); };
-                    historyList.appendChild(d);
-                });
-            };
-
-            const renderChat = () => {
-                chatWindow.innerHTML = "";
-                const chat = chatHistory.find(c => c.id === currentId);
-                if (!chat || !chat.messages.length) {
-                    chatWindow.innerHTML = `<div class="m-auto text-center opacity-40"><div class="text-6xl mb-4">🚀</div><h2 class="text-2xl font-bold">أهلاً بك، كيف أساعدك؟</h2></div>`;
-                    return;
-                }
-                chat.messages.forEach(m => {
-                    const div = document.createElement("div");
-                    div.className = m.role === "user" ? "message-user" : "message-ai";
-                    if (m.role === "user" && m.file && m.file.type === 'image') {
-                        div.innerHTML = `<img src="data:${m.file.mimeType};base64,${m.file.data}" class="max-w-full rounded-lg mb-2"><p>${m.content}</p>`;
-                    } else if (m.role === "ai") {
-                        const cleanText = m.content.replace(/<\/?[^>]+(>|$)/g, ""); 
-                        div.innerHTML = `<div class="msg-content">${marked.parse(m.content)}</div><div class="msg-controls"><button class="msg-btn" onclick="speakText(\`${cleanText.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`, this)">🔈 صوت</button><button class="msg-btn" onclick="copyText(\`${m.content.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`, this)">📋 نسخ</button></div>`;
-                    } else { div.textContent = m.content; }
-                    chatWindow.appendChild(div);
-                });
-                chatWindow.scrollTop = chatWindow.scrollHeight;
-            };
-
-            const saveChats = () => { localStorage.setItem("chats", JSON.stringify(chatHistory)); localStorage.setItem("currentChatId", currentId); };
-            window.toggleSidebar = () => { document.getElementById('sidebar').classList.toggle('open'); overlay.classList.toggle('active'); };
             userInput.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } };
             renderHistory(); renderChat();
         });
