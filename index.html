@@ -95,18 +95,29 @@
         .message-user { align-self: flex-end; background: #1e293b; border-radius: 18px 18px 0 18px; max-width: 85%; padding: 12px 16px; border: 1px solid #334155; position: relative; }
         .message-ai { align-self: flex-start; background: rgba(124,58,237,0.05); border: 1px solid rgba(124,58,237,0.2); border-radius: 18px 18px 18px 0; max-width: 85%; padding: 12px 16px; line-height: 1.8; color: #e2e8f0; position: relative; }
         
-        /* Speaker Icon for AI messages */
-        .speaker-btn {
-            position: absolute;
-            bottom: -25px;
-            left: 5px;
+        /* Controls for AI messages */
+        .msg-controls {
+            display: flex;
+            gap: 12px;
+            margin-top: 8px;
+            padding-top: 4px;
+        }
+        
+        .msg-btn {
             font-size: 14px;
             cursor: pointer;
             color: #7c3aed;
             opacity: 0.6;
-            transition: opacity 0.2s;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(124,58,237,0.1);
+            padding: 2px 8px;
+            border-radius: 6px;
         }
-        .speaker-btn:hover { opacity: 1; }
+        .msg-btn:hover { opacity: 1; background: rgba(124,58,237,0.2); }
+        .msg-btn.copied { color: #10b981; background: rgba(16, 185, 129, 0.1); }
 
         /* Fixed input wrapper at bottom */
         .input-wrapper { 
@@ -260,34 +271,31 @@
             
             window.speakText = (text, btn) => {
                 if (isSpeaking && currentSpeakingBtn === btn) {
-                    // Stop current speech
                     window.speechSynthesis.cancel();
                     isSpeaking = false;
-                    btn.textContent = '🔈';
+                    btn.innerHTML = '🔈 صوت';
                     currentSpeakingBtn = null;
                 } else {
-                    // Stop any previous speech
                     if (currentSpeakingBtn) {
-                        currentSpeakingBtn.textContent = '🔈';
+                        currentSpeakingBtn.innerHTML = '🔈 صوت';
                     }
                     window.speechSynthesis.cancel();
                     
-                    // Start new speech
                     const utterance = new SpeechSynthesisUtterance(text);
                     utterance.lang = 'ar-SA';
                     utterance.rate = 1.0;
                     
-                    btn.textContent = '⏸️';
+                    btn.innerHTML = '⏸️ توقف';
                     isSpeaking = true;
                     currentSpeakingBtn = btn;
                     
                     utterance.onend = () => {
-                        btn.textContent = '🔈';
+                        btn.innerHTML = '🔈 صوت';
                         isSpeaking = false;
                         currentSpeakingBtn = null;
                     };
                     utterance.onerror = () => {
-                        btn.textContent = '🔈';
+                        btn.innerHTML = '🔈 صوت';
                         isSpeaking = false;
                         currentSpeakingBtn = null;
                     };
@@ -296,7 +304,23 @@
                 }
             };
 
-            // 2. PDF Export Implementation - Fixed
+            // 2. Copy to Clipboard Implementation
+            window.copyText = async (text, btn) => {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    const originalHTML = btn.innerHTML;
+                    btn.innerHTML = '✅ تم النسخ';
+                    btn.classList.add('copied');
+                    setTimeout(() => {
+                        btn.innerHTML = originalHTML;
+                        btn.classList.remove('copied');
+                    }, 2000);
+                } catch (err) {
+                    console.error('Failed to copy:', err);
+                }
+            };
+
+            // 3. PDF Export Implementation
             window.downloadPDF = () => {
                 const chat = chatHistory.find(c => c.id === currentId);
                 if (!chat || !chat.messages.length) {
@@ -304,11 +328,9 @@
                     return;
                 }
 
-                // Create a proper HTML structure for PDF
                 const pdfContent = document.createElement('div');
                 pdfContent.style.cssText = 'padding: 40px; color: black; background: white; font-family: Cairo, sans-serif; direction: rtl; line-height: 1.8;';
                 
-                // Add header
                 const header = document.createElement('div');
                 header.style.cssText = 'border-bottom: 3px solid #7c3aed; padding-bottom: 20px; margin-bottom: 30px; text-align: center;';
                 header.innerHTML = `
@@ -318,7 +340,6 @@
                 `;
                 pdfContent.appendChild(header);
                 
-                // Add messages
                 const body = document.createElement('div');
                 chat.messages.forEach((m, idx) => {
                     const msgDiv = document.createElement('div');
@@ -331,25 +352,23 @@
                 });
                 pdfContent.appendChild(body);
                 
-                // Add footer
                 const footer = document.createElement('div');
                 footer.style.cssText = 'border-top: 1px solid #ddd; padding-top: 20px; margin-top: 30px; text-align: center; color: #999; font-size: 11px;';
-                footer.innerHTML = `تم إنشاء هذا التقرير بواسطة Pro AI | ${new Date().toLocaleString('ar-SA')}`;
+                footer.innerHTML = `تم إنشاء هذا التقرير بواسطة Pro AI | المهندس صلاح الوافي | ${new Date().toLocaleString('ar-SA')}`;
                 pdfContent.appendChild(footer);
                 
-                // Generate PDF with proper options
                 const opt = {
                     margin: [10, 10, 10, 10],
                     filename: `سجل_محادثة_${chat.title.substring(0, 15)}_${Date.now()}.pdf`,
                     image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: { scale: 2, logging: true, useCORS: true, backgroundColor: '#ffffff' },
+                    html2canvas: { scale: 2, logging: false, useCORS: true, backgroundColor: '#ffffff' },
                     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true }
                 };
                 
                 html2pdf().set(opt).from(pdfContent).save();
             };
 
-            // 3. Clear Chat Implementation
+            // 4. Clear Chat Implementation
             window.clearCurrentChat = () => {
                 if (confirm("هل أنت متأكد من مسح المحادثة الحالية؟")) {
                     const chat = chatHistory.find(c => c.id === currentId);
@@ -395,9 +414,6 @@
                     let transcript = '';
                     for (let i = event.resultIndex; i < event.results.length; i++) {
                         transcript += event.results[i][0].transcript;
-                        if (event.results[i].isFinal) {
-                            transcript += ' ';
-                        }
                     }
                     userInput.value += transcript;
                     userInput.style.height = 'auto';
@@ -466,10 +482,13 @@
                 div.className = role === "user" ? "message-user" : "message-ai";
                 
                 if (role === "ai") {
-                    const cleanText = text.replace(/<\/?[^>]+(>|$)/g, ""); // Clean text for speech
+                    const cleanText = text.replace(/<\/?[^>]+(>|$)/g, ""); 
                     div.innerHTML = `
                         <div class="msg-content">${typeof marked !== 'undefined' ? marked.parse(text) : text}</div>
-                        <button class="speaker-btn" onclick="speakText(\`${cleanText.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`, this)" title="قراءة الرد">🔈</button>
+                        <div class="msg-controls">
+                            <button class="msg-btn" onclick="speakText(\`${cleanText.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`, this)">🔈 صوت</button>
+                            <button class="msg-btn" onclick="copyText(\`${text.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`, this)">📋 نسخ</button>
+                        </div>
                     `;
                     if (typeof hljs !== 'undefined') {
                         div.querySelectorAll('pre code').forEach(b => hljs.highlightElement(b));
@@ -486,7 +505,7 @@
             window.handlePdfUpload = async (input) => {
                 const file = input.files[0];
                 if (!file) return;
-                const status = addMessageUI("ai", "جاري قراءة الملف...");
+                const statusDiv = addMessageUI("ai", "جاري قراءة الملف...");
                 try {
                     const arrayBuffer = await file.arrayBuffer();
                     if (typeof pdfjsLib !== 'undefined') {
@@ -499,9 +518,9 @@
                             text += content.items.map(item => item.str).join(" ") + " ";
                         }
                         pdfContent = text;
-                        status.innerHTML = "✅ تم تحميل PDF. اسألني عنه الآن.";
+                        statusDiv.innerHTML = "✅ تم تحميل PDF. اسألني عنه الآن.";
                     }
-                } catch (e) { status.innerHTML = "❌ خطأ في الملف."; }
+                } catch (e) { statusDiv.innerHTML = "❌ خطأ في الملف."; }
             };
 
             window.sendMessage = async () => {
@@ -512,6 +531,7 @@
                 const chat = chatHistory.find(c => c.id === currentId);
                 if (!chat.messages.length) chat.title = text.substring(0, 25);
 
+                const fullPrompt = pdfContent ? `[سياق ملف PDF]: ${pdfContent}\n\n[سؤال المستخدم]: ${text}` : text;
                 chat.messages.push({ role: "user", content: text });
                 addMessageUI("user", text);
                 userInput.value = "";
@@ -527,11 +547,11 @@
                         body: JSON.stringify({
                             model: "llama-3.3-70b-versatile",
                             messages: [
-                                { role: "system", content: "أنت Pro AI، مساعد ذكي طوره صلاح الوافي." },
-                                ...chat.messages.map(m => ({
+                                ...chat.messages.slice(0, -1).map(m => ({
                                     role: m.role === "ai" ? "assistant" : "user",
                                     content: m.content
-                                }))
+                                })),
+                                { role: "user", content: fullPrompt }
                             ],
                             temperature: 0.7
                         })
@@ -545,11 +565,12 @@
                         chat.messages.push({ role: "ai", content: reply });
                         addMessageUI("ai", reply);
                         saveChats();
+                        pdfContent = ""; 
                     } else {
                         throw new Error("استجابة غير صالحة");
                     }
                 } catch (e) {
-                    loading.innerHTML = "❌ عذراً، حدث خطأ في الاتصال بالسيرفر. تأكد من إعداد المفتاح في Netlify.";
+                    loading.innerHTML = "❌ عذراً، حدث خطأ في الاتصال بالسيرفر.";
                 } finally {
                     sendBtn.disabled = false;
                 }

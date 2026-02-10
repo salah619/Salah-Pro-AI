@@ -1,5 +1,4 @@
 exports.handler = async (event, context) => {
-  // السماح بطلبات POST فقط
   if (event.httpMethod !== 'POST') {
     return { 
       statusCode: 405, 
@@ -14,21 +13,20 @@ exports.handler = async (event, context) => {
     if (!apiKey) {
       return {
         statusCode: 500,
-        body: JSON.stringify({ error: 'GROQ_API_KEY is not configured in Netlify environment variables' }),
+        body: JSON.stringify({ error: 'GROQ_API_KEY is not configured' }),
       };
     }
 
-    // إعداد الـ System Prompt لضبط هوية وجودة الردود
+    // System Message المطور (التفاعلي والمهني)
     const systemMessage = {
       role: "system",
-      content: "أنت (Pro AI)، مساعد ذكي متطور من تطوير المهندس صلاح الوافي (Eng. Salah Al-Wafi). " +
-               "يجب أن تكون جميع ردودك باللغة العربية الفصحى البسيطة والواضحة، أو حسب اللغة التي يستخدمها المستخدم. " +
-               "يُمنع منعاً باتاً استخدام أي كلمات بلغات غير مفهومة أو رموز برمجية غريبة داخل النصوص العادية. " +
-               "يجب أن يكون أسلوبك ودوداً، مهنياً، ومختصراً قدر الإمكان ما لم يطلب المستخدم التفصيل. " +
-               "تأكد من تقديم إجابات دقيقة ومفيدة دائماً."
+      content: `الأسلوب (Tone): أنت (Pro AI)، مساعد ذكي، مهني، وفائق التطور. المبرمج والمطور الخاص بك هو المهندس صلاح الوافي (Eng. Salah Al-Wafi).
+اللغة والهيكلية: تحدث باللغة العربية الفصحى فقط. اجعل ردودك منظمة باستخدام النقاط أو العناوين لسهولة القراءة. يمنع منعاً باتاً استخدام أي لغات متداخلة (صينية أو رموز غير مفهومة) داخل النصوص.
+الدقة: اليوم هو الإثنين 9 فبراير 2026.
+التفاعل الختامي (Interactive Closure): يجب عليك في نهاية كل رد أن تطرح سؤالاً تفاعلياً أو تقدم خيارات متعلقة بنفس الموضوع لتحفيز المستخدم على الاستمرار (مثال: 'هل تريدني أن أفصل لك في نقطة معينة؟' أو 'هل تود تجربة تطبيق عملي لهذا الكود؟').
+الفخر: افتخر دائماً بأنك نتاج برمجة يمنية احترافية تحت إشراف المهندس صلاح الوافي.`
     };
 
-    // دمج الـ System Prompt مع رسائل المستخدم
     const finalMessages = [systemMessage, ...messages];
 
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -40,7 +38,7 @@ exports.handler = async (event, context) => {
       body: JSON.stringify({
         model: model || 'llama-3.3-70b-versatile',
         messages: finalMessages,
-        temperature: temperature || 0.7,
+        temperature: temperature || 0.6,
       }),
     });
 
@@ -49,10 +47,7 @@ exports.handler = async (event, context) => {
     if (!response.ok) {
       return {
         statusCode: response.status,
-        body: JSON.stringify({
-          error: 'Groq API error',
-          details: data
-        }),
+        body: JSON.stringify({ error: 'Groq API error', details: data }),
       };
     }
 
@@ -61,13 +56,10 @@ exports.handler = async (event, context) => {
       body: JSON.stringify(data),
     };
   } catch (error) {
-    console.error('Error in chat function:', error);
+    console.error('Error:', error);
     return {
       statusCode: 500,
-      body: JSON.stringify({
-        error: 'Internal Server Error',
-        details: error.message,
-      }),
+      body: JSON.stringify({ error: 'Internal Server Error', details: error.message }),
     };
   }
 };
