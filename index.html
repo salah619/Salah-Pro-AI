@@ -21,6 +21,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" media="print" onload="this.media='all'">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
     
+    <!-- HTML2PDF Library for PDF Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
+    
     <!-- Optimized Font Loading -->
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     
@@ -89,9 +92,22 @@
             padding-bottom: 40px; /* Space before input */
         }
         
-        .message-user { align-self: flex-end; background: #1e293b; border-radius: 18px 18px 0 18px; max-width: 85%; padding: 12px 16px; border: 1px solid #334155; }
-        .message-ai { align-self: flex-start; background: rgba(124,58,237,0.05); border: 1px solid rgba(124,58,237,0.2); border-radius: 18px 18px 18px 0; max-width: 85%; padding: 12px 16px; line-height: 1.8; color: #e2e8f0; }
+        .message-user { align-self: flex-end; background: #1e293b; border-radius: 18px 18px 0 18px; max-width: 85%; padding: 12px 16px; border: 1px solid #334155; position: relative; }
+        .message-ai { align-self: flex-start; background: rgba(124,58,237,0.05); border: 1px solid rgba(124,58,237,0.2); border-radius: 18px 18px 18px 0; max-width: 85%; padding: 12px 16px; line-height: 1.8; color: #e2e8f0; position: relative; }
         
+        /* Speaker Icon for AI messages */
+        .speaker-btn {
+            position: absolute;
+            bottom: -25px;
+            left: 5px;
+            font-size: 14px;
+            cursor: pointer;
+            color: #7c3aed;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+        .speaker-btn:hover { opacity: 1; }
+
         /* Fixed input wrapper at bottom */
         .input-wrapper { 
             background: #0f172a; 
@@ -120,6 +136,38 @@
             50% { transform: scale(1.2); opacity: 0.7; }
             100% { transform: scale(1); opacity: 1; }
         }
+
+        /* Action Buttons */
+        .action-btn {
+            background: rgba(31, 41, 55, 0.8);
+            border: 1px solid #374151;
+            color: #9ca3af;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+        .action-btn:hover {
+            background: #374151;
+            color: white;
+        }
+
+        /* PDF Export Styling (Hidden from view) */
+        #pdf-template {
+            display: none;
+            padding: 40px;
+            color: black;
+            background: white;
+            font-family: 'Cairo', sans-serif;
+            direction: rtl;
+        }
+        .pdf-header { border-bottom: 2px solid #7c3aed; padding-bottom: 10px; margin-bottom: 20px; }
+        .pdf-msg { margin-bottom: 15px; padding: 10px; border-radius: 8px; }
+        .pdf-user { background: #f3f4f6; text-align: right; }
+        .pdf-ai { background: #eef2ff; border-right: 4px solid #7c3aed; }
     </style>
 </head>
 <body>
@@ -148,9 +196,17 @@
                 <button onclick="toggleSidebar()" class="lg:hidden text-2xl text-purple-400">☰</button>
                 <h1 class="text-xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">Pro AI</h1>
             </div>
-            <div class="flex items-center gap-2 bg-gray-800 p-1 px-3 rounded-full border border-gray-700">
-                <input type="checkbox" id="webToggle" class="accent-purple-500 w-4 h-4 cursor-pointer">
-                <label for="webToggle" class="text-xs text-gray-300 cursor-pointer select-none">بحث مباشر</label>
+            <div class="flex items-center gap-2">
+                <button onclick="downloadPDF()" class="action-btn" title="تحميل المحادثة PDF">
+                    <span>📄</span> <span class="hidden sm:inline">تحميل PDF</span>
+                </button>
+                <button onclick="clearCurrentChat()" class="action-btn text-red-400 hover:text-red-300" title="مسح المحادثة">
+                    <span>🗑️</span> <span class="hidden sm:inline">مسح</span>
+                </button>
+                <div class="flex items-center gap-2 bg-gray-800 p-1 px-3 rounded-full border border-gray-700 ml-2">
+                    <input type="checkbox" id="webToggle" class="accent-purple-500 w-4 h-4 cursor-pointer">
+                    <label for="webToggle" class="text-xs text-gray-300 cursor-pointer select-none">بحث مباشر</label>
+                </div>
             </div>
         </header>
 
@@ -175,6 +231,9 @@
         </div>
     </main>
 
+    <!-- Hidden PDF Template -->
+    <div id="pdf-template"></div>
+
     <script>
         window.addEventListener('DOMContentLoaded', () => {
             if (typeof marked !== 'undefined') {
@@ -194,6 +253,68 @@
             let chatHistory = JSON.parse(localStorage.getItem("chats") || "[]");
             let currentId = localStorage.getItem("currentChatId") ? parseInt(localStorage.getItem("currentChatId")) : null;
             let pdfContent = "";
+
+            // 1. Speech Synthesis Implementation
+            window.speakText = (text, btn) => {
+                window.speechSynthesis.cancel(); // Stop any current speech
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'ar-SA';
+                utterance.rate = 1.0;
+                
+                btn.textContent = '🔊';
+                utterance.onend = () => { btn.textContent = '🔈'; };
+                utterance.onerror = () => { btn.textContent = '🔈'; };
+                
+                window.speechSynthesis.speak(utterance);
+            };
+
+            // 2. PDF Export Implementation
+            window.downloadPDF = () => {
+                const chat = chatHistory.find(c => c.id === currentId);
+                if (!chat || !chat.messages.length) {
+                    alert("لا توجد محادثة لتحميلها!");
+                    return;
+                }
+
+                const template = document.getElementById('pdf-template');
+                template.innerHTML = `
+                    <div class="pdf-header">
+                        <h1 style="color: #7c3aed; margin: 0;">تقرير محادثة Pro AI</h1>
+                        <p style="color: #666; font-size: 12px;">بواسطة صلاح الوافي | التاريخ: ${new Date().toLocaleDateString('ar-SA')}</p>
+                    </div>
+                    <div id="pdf-body"></div>
+                `;
+
+                const body = template.querySelector('#pdf-body');
+                chat.messages.forEach(m => {
+                    const div = document.createElement('div');
+                    div.className = `pdf-msg ${m.role === 'user' ? 'pdf-user' : 'pdf-ai'}`;
+                    div.innerHTML = `<strong>${m.role === 'user' ? 'أنت' : 'Pro AI'}:</strong><br>${m.content}`;
+                    body.appendChild(div);
+                });
+
+                const opt = {
+                    margin: 10,
+                    filename: `تقرير_محادثة_${chat.title.substring(0,10)}.pdf`,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2 },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                };
+
+                html2pdf().from(template).set(opt).save();
+            };
+
+            // 3. Clear Chat Implementation
+            window.clearCurrentChat = () => {
+                if (confirm("هل أنت متأكد من مسح المحادثة الحالية؟")) {
+                    const chat = chatHistory.find(c => c.id === currentId);
+                    if (chat) {
+                        chat.messages = [];
+                        saveChats();
+                        renderChat();
+                    }
+                }
+            };
 
             // Voice Input Implementation
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -236,8 +357,6 @@
                     userInput.value += transcript;
                     userInput.style.height = 'auto';
                     userInput.style.height = userInput.scrollHeight + 'px';
-                    console.log('Transcript added:', transcript);
-                    console.log('Current input value:', userInput.value);
                 };
 
                 recognition.onerror = (event) => {
@@ -247,7 +366,6 @@
                 };
             } else {
                 voiceBtn.style.display = 'none';
-                console.warn('Web Speech API is not supported in this browser.');
             }
 
             window.toggleSidebar = () => {
@@ -301,18 +419,20 @@
             const addMessageUI = (role, text) => {
                 const div = document.createElement("div");
                 div.className = role === "user" ? "message-user" : "message-ai";
+                
                 if (role === "ai") {
-                    if (typeof marked !== 'undefined') {
-                        div.innerHTML = marked.parse(text);
-                        if (typeof hljs !== 'undefined') {
-                            div.querySelectorAll('pre code').forEach(b => hljs.highlightElement(b));
-                        }
-                    } else {
-                        div.textContent = text;
+                    const cleanText = text.replace(/<\/?[^>]+(>|$)/g, ""); // Clean text for speech
+                    div.innerHTML = `
+                        <div class="msg-content">${typeof marked !== 'undefined' ? marked.parse(text) : text}</div>
+                        <button class="speaker-btn" onclick="speakText(\`${cleanText.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`, this)" title="قراءة الرد">🔈</button>
+                    `;
+                    if (typeof hljs !== 'undefined') {
+                        div.querySelectorAll('pre code').forEach(b => hljs.highlightElement(b));
                     }
                 } else {
                     div.textContent = text;
                 }
+                
                 chatWindow.appendChild(div);
                 chatWindow.scrollTop = chatWindow.scrollHeight;
                 return div;
@@ -385,7 +505,6 @@
                     }
                 } catch (e) {
                     loading.innerHTML = "❌ عذراً، حدث خطأ في الاتصال بالسيرفر. تأكد من إعداد المفتاح في Netlify.";
-                    console.error("Error details:", e);
                 } finally {
                     sendBtn.disabled = false;
                 }
