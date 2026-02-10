@@ -109,6 +109,17 @@
         @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
         
         .signature { font-size: 10px; color: #4b5563; text-align: center; padding: 10px; letter-spacing: 1px; }
+
+        /* Voice Input Styles */
+        .mic-active {
+            color: #ef4444 !important;
+            animation: pulse-red 1.5s infinite;
+        }
+        @keyframes pulse-red {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
     </style>
 </head>
 <body>
@@ -155,6 +166,7 @@
             <div class="max-w-4xl mx-auto flex items-end gap-2 bg-gray-900 p-2 rounded-2xl border border-gray-800 shadow-2xl">
                 <button onclick="document.getElementById('pdfInput').click()" class="p-3 text-gray-400 hover:text-purple-400" title="إرفاق PDF">📎</button>
                 <textarea id="userInput" rows="1" placeholder="اسألني عن أي شيء..." oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
+                <button id="voiceBtn" class="p-3 text-gray-400 hover:text-purple-400 transition-all" title="إدخال صوتي">🎤</button>
                 <button id="sendBtn" onclick="sendMessage()" class="bg-purple-600 hover:bg-purple-500 p-3 rounded-xl transition-all active:scale-90">
                     ➤
                 </button>
@@ -175,12 +187,60 @@
             const chatWindow = document.getElementById("chat-window");
             const userInput = document.getElementById("userInput");
             const sendBtn = document.getElementById("sendBtn");
+            const voiceBtn = document.getElementById("voiceBtn");
             const historyList = document.getElementById("historyList");
             const overlay = document.getElementById("overlay");
 
             let chatHistory = JSON.parse(localStorage.getItem("chats") || "[]");
             let currentId = localStorage.getItem("currentChatId") ? parseInt(localStorage.getItem("currentChatId")) : null;
             let pdfContent = "";
+
+            // Voice Input Implementation
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (SpeechRecognition) {
+                const recognition = new SpeechRecognition();
+                recognition.lang = 'ar-SA';
+                recognition.interimResults = false;
+                recognition.continuous = false;
+
+                let isRecognizing = false;
+
+                voiceBtn.onclick = () => {
+                    if (isRecognizing) {
+                        recognition.stop();
+                    } else {
+                        recognition.start();
+                    }
+                };
+
+                recognition.onstart = () => {
+                    isRecognizing = true;
+                    voiceBtn.classList.add('mic-active');
+                    userInput.placeholder = "جاري الاستماع...";
+                };
+
+                recognition.onend = () => {
+                    isRecognizing = false;
+                    voiceBtn.classList.remove('mic-active');
+                    userInput.placeholder = "اسألني عن أي شيء...";
+                };
+
+                recognition.onresult = (event) => {
+                    const transcript = event.results[0][0].transcript;
+                    userInput.value += (userInput.value ? ' ' : '') + transcript;
+                    userInput.style.height = 'auto';
+                    userInput.style.height = userInput.scrollHeight + 'px';
+                };
+
+                recognition.onerror = (event) => {
+                    console.error('Speech recognition error:', event.error);
+                    isRecognizing = false;
+                    voiceBtn.classList.remove('mic-active');
+                };
+            } else {
+                voiceBtn.style.display = 'none';
+                console.warn('Web Speech API is not supported in this browser.');
+            }
 
             window.toggleSidebar = () => {
                 document.getElementById('sidebar').classList.toggle('open');
@@ -282,6 +342,7 @@
                 chat.messages.push({ role: "user", content: text });
                 addMessageUI("user", text);
                 userInput.value = "";
+                userInput.style.height = 'auto';
                 sendBtn.disabled = true;
 
                 const loading = addMessageUI("ai", '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>');
