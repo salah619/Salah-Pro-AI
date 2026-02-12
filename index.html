@@ -81,11 +81,11 @@
 
         <div class="input-wrapper">
             <div class="max-w-4xl mx-auto flex items-end gap-2 bg-gray-900 p-2 rounded-2xl border border-gray-800 shadow-2xl">
-                <button onclick="document.getElementById('pdfInput').click()" class="p-3 text-gray-400 hover:text-purple-400" title="إرفاق PDF">📎</button>
+                <button onclick="document.getElementById('pdfInput').click()" class="p-3 text-gray-400 hover:text-purple-400" title="إرفاق صورة أو PDF">📎</button>
                 <textarea id="userInput" rows="1" placeholder="اسألني عن أي شيء..." oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
                 <button id="voiceBtn" class="p-3 text-gray-400 hover:text-purple-400 transition-all" title="إدخال صوتي">🎤</button>
                 <button id="sendBtn" onclick="sendMessage()" class="bg-purple-600 hover:bg-purple-500 p-3 rounded-xl transition-all active:scale-90">➤</button>
-                <input type="file" id="pdfInput" accept="application/pdf" class="hidden" onchange="handlePdfUpload(this)">
+                <input type="file" id="pdfInput" accept="image/*,application/pdf" class="hidden" onchange="handlePdfUpload(this)">
             </div>
         </div>
     </main>
@@ -106,6 +106,44 @@
             let chatHistory = JSON.parse(localStorage.getItem("chats") || "[]");
             let currentId = localStorage.getItem("currentChatId") ? parseInt(localStorage.getItem("currentChatId")) : null;
             let pdfContent = "";
+            let attachedImage = null; // Store compressed image data
+
+            // Image Compression Function
+            window.compressImage = (file) => {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            let width = img.width;
+                            let height = img.height;
+                            const maxSize = 1024;
+                            if (width > height) {
+                                if (width > maxSize) { height = Math.round((height * maxSize) / width); width = maxSize; }
+                            } else {
+                                if (height > maxSize) { width = Math.round((width * maxSize) / height); height = maxSize; }
+                            }
+                            canvas.width = width;
+                            canvas.height = height;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, width, height);
+                            const compressed = canvas.toDataURL('image/jpeg', 0.6);
+                            const base64 = compressed.split(',')[1];
+                            const sizeInMB = (base64.length * 0.75) / (1024 * 1024);
+                            if (sizeInMB > 4) {
+                                reject(new Error('حجم الصورة كبير جداً بعد الضغط. يرجى اختيار صورة أصغر.'));
+                            } else {
+                                resolve({ base64, mimeType: 'image/jpeg', size: sizeInMB });
+                            }
+                        };
+                        img.onerror = () => reject(new Error('فشل تحميل الصورة'));
+                        img.src = e.target.result;
+                    };
+                    reader.onerror = () => reject(new Error('فشل قراءة الملف'));
+                    reader.readAsDataURL(file);
+                });
+            };
 
             // 1. Speech Synthesis
             let currentSpeakingBtn = null;
@@ -230,55 +268,106 @@
             window.handlePdfUpload = async (input) => {
                 const file = input.files[0];
                 if (!file) return;
-                const status = addMessageUI("ai", "جاري قراءة PDF...");
-                try {
-                    const buffer = await file.arrayBuffer();
-                    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-                    const pdf = await pdfjsLib.getDocument({data: buffer}).promise;
-                    let text = "";
-                    for (let i = 1; i <= pdf.numPages; i++) {
-                        const page = await pdf.getPage(i);
-                        const content = await page.getTextContent();
-                        text += content.items.map(item => item.str).join(" ") + " ";
+                if (file.type === 'application/pdf') {
+                    const status = addMessageUI("ai", "جاري قراءة PDF...");
+                    try {
+                        const buffer = await file.arrayBuffer();
+                        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                        const pdf = await pdfjsLib.getDocument({data: buffer}).promise;
+                        let text = "";
+                        for (let i = 1; i <= pdf.numPages; i++) {
+                            const page = await pdf.getPage(i);
+                            const content = await page.getTextContent();
+                            text += content.items.map(item => item.str).join(" ") + " ";
+                        }
+                        pdfContent = text;
+                        status.innerHTML = "✅ تم تحميل PDF بنجاح.";
+                    } catch (e) { status.innerHTML = "❌ خطأ في الملف."; }
+                } else if (file.type.startsWith('image/')) {
+                    try {
+                        const status = addMessageUI("ai", "جاري ضغط الصورة...");
+                        const compressed = await compressImage(file);
+                        attachedImage = compressed;
+                        status.innerHTML = `✅ تم تحميل الصورة بنجاح (${compressed.size.toFixed(2)} MB)`;
+                    } catch (e) {
+                        addMessageUI("ai", `❌ ${e.message}`);
+                        attachedImage = null;
                     }
-                    pdfContent = text;
-                    status.innerHTML = "✅ تم تحميل PDF بنجاح.";
-                } catch (e) { status.innerHTML = "❌ خطأ في الملف."; }
+                }
             };
 
             window.sendMessage = async () => {
                 const text = userInput.value.trim();
-                if (!text && !pdfContent) return;
+                if (!text && !pdfContent && !attachedImage) return;
                 if (!currentId) newChat();
                 const chat = chatHistory.find(c => c.id === currentId);
                 if (!chat.messages.length) chat.title = text.substring(0, 25);
+                
+                // Add user message
                 chat.messages.push({ role: "user", content: text });
-                addMessageUI("user", text);
+                const userDiv = addMessageUI("user", text);
+                if (attachedImage) {
+                    const img = document.createElement('img');
+                    img.src = `data:${attachedImage.mimeType};base64,${attachedImage.base64}`;
+                    img.style.cssText = 'max-width: 200px; border-radius: 8px; margin-top: 8px;';
+                    userDiv.appendChild(img);
+                }
+                
                 userInput.value = "";
                 userInput.style.height = 'auto';
                 sendBtn.disabled = true;
                 const loading = addMessageUI("ai", '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>');
+                
                 try {
+                    let payload = {
+                        model: "gpt-4o-mini",
+                        messages: []
+                    };
+                    
+                    // Build messages with vision support if image is attached
+                    if (attachedImage) {
+                        payload.messages.push({
+                            role: "user",
+                            content: [
+                                { type: "text", text: text || "حلل هذه الصورة" },
+                                { type: "image_url", image_url: { url: `data:${attachedImage.mimeType};base64,${attachedImage.base64}` } }
+                            ]
+                        });
+                        attachedImage = null; // Clear after sending
+                    } else {
+                        payload.messages = [
+                            { role: "system", content: "أنت Pro AI، مساعد ذكي طوره صلاح الوافي." },
+                            ...chat.messages.map(m => ({ role: m.role === "ai" ? "assistant" : "user", content: m.content }))
+                        ];
+                    }
+                    
                     const res = await fetch("/.netlify/functions/chat", { 
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            model: "llama-3.3-70b-versatile",
-                            messages: [
-                                { role: "system", content: "أنت Pro AI، مساعد ذكي طوره صلاح الوافي." },
-                                ...chat.messages.map(m => ({ role: m.role === "ai" ? "assistant" : "user", content: m.content }))
-                            ]
-                        })
+                        body: JSON.stringify(payload)
                     });
+                    
                     const data = await res.json();
                     loading.remove();
+                    
                     if (data.choices && data.choices[0]) {
                         const reply = data.choices[0].message.content;
                         chat.messages.push({ role: "ai", content: reply });
                         addMessageUI("ai", reply);
                         saveChats();
-                    } else { throw new Error(); }
-                } catch (e) { loading.innerHTML = "❌ خطأ في الاتصال. تأكد من إعدادات API."; } finally { sendBtn.disabled = false; }
+                    } else if (data.error) {
+                        throw new Error(data.error.message || 'خطأ من السيرفر');
+                    } else {
+                        throw new Error('استجابة غير متوقعة');
+                    }
+                } catch (e) {
+                    console.error('Send error:', e);
+                    loading.remove();
+                    addMessageUI("ai", `❌ خطأ: ${e.message}\n\nيرجى المحاولة مرة أخرى أو التأكد من إعدادات API.`);
+                    attachedImage = null; // Reset state on error
+                } finally {
+                    sendBtn.disabled = false;
+                }
             };
 
             userInput.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } };
