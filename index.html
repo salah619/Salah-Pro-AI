@@ -117,7 +117,7 @@
                             const canvas = document.createElement('canvas');
                             let width = img.width;
                             let height = img.height;
-                            const maxSize = 1024;
+                            const maxSize = 800;
                             if (width > height) {
                                 if (width > maxSize) { height = Math.round((height * maxSize) / width); width = maxSize; }
                             } else {
@@ -127,12 +127,12 @@
                             canvas.height = height;
                             const ctx = canvas.getContext('2d');
                             ctx.drawImage(img, 0, 0, width, height);
-                            const compressed = canvas.toDataURL('image/jpeg', 0.6);
+                            const compressed = canvas.toDataURL('image/jpeg', 0.5);
                             const base64 = compressed.split(',')[1];
                             const sizeInMB = (base64.length * 0.75) / (1024 * 1024);
-                            console.log('Image compressed:', width, 'x', height, 'Size:', sizeInMB.toFixed(2), 'MB');
-                            if (sizeInMB > 4) {
-                                reject(new Error('حجم الصورة كبير جداً (أكثر من 4 MB). يرجى اختيار صورة أصغر.'));
+                            console.log('Image compressed:', width, 'x', height, 'Quality: 0.5, Size:', sizeInMB.toFixed(2), 'MB');
+                            if (sizeInMB > 3) {
+                                reject(new Error('حجم الصورة كبير جداً (أكثر من 3 MB حتى بعد الضغط). يرجى اختيار صورة أصغر.'));
                             } else {
                                 resolve({ base64, mimeType: 'image/jpeg', size: sizeInMB });
                             }
@@ -317,29 +317,10 @@
                 const loading = addMessageUI("ai", '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>');
                 
                 try {
-                    let payload = {};
-                    let isVisionRequest = false;
+                    let reply = null;
                     
-                    if (attachedImage) {
-                        isVisionRequest = true;
-                        payload = {
-                            model: "gemini-1.5-flash",
-                            contents: [{
-                                role: "user",
-                                parts: [
-                                    { text: text || "حلل هذه الصورة بالتفصيل" },
-                                    {
-                                        inline_data: {
-                                            mime_type: attachedImage.mimeType,
-                                            data: attachedImage.base64
-                                        }
-                                    }
-                                ]
-                            }]
-                        };
-                        attachedImage = null;
-                    } else {
-                        payload = {
+                    const sendTextOnly = async () => {
+                        const textPayload = {
                             model: "llama-3.3-70b-versatile",
                             messages: [
                                 { role: "system", content: "أنت Pro AI، مساعد ذكي طوره المهندس صلاح الوافي. رد بطريقة ودية ومفيدة وموثوقة." },
@@ -349,42 +330,70 @@
                                 }))
                             ]
                         };
-                    }
+                        
+                        const res = await fetch("/.netlify/functions/chat", { 
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                            body: JSON.stringify(textPayload)
+                        });
+                        
+                        if (!res.ok) throw new Error(`خطأ: ${res.status}`);
+                        const data = await res.json();
+                        
+                        if (data.choices && data.choices[0] && data.choices[0].message) {
+                            return data.choices[0].message.content;
+                        } else if (data.error) {
+                            throw new Error(data.error.message || 'خطأ من السيرفر');
+                        }
+                        throw new Error('لم تحتوِ الاستجابة على نص صحيح');
+                    };
                     
-                    const res = await fetch("/.netlify/functions/chat", { 
-                        method: "POST",
-                        headers: { 
-                            "Content-Type": "application/json",
-                            "Accept": "application/json"
-                        },
-                        body: JSON.stringify(payload)
-                    });
-                    
-                    if (!res.ok) {
-                        const errorText = await res.text();
-                        console.error('API Error:', res.status, errorText);
-                        let errorMsg = `خطأ من السيرفر (${res.status})`;
+                    if (attachedImage) {
                         try {
-                            const errorJson = JSON.parse(errorText);
-                            if (errorJson.error) {
-                                errorMsg = errorJson.error.message || errorMsg;
+                            const visionPayload = {
+                                model: "gemini-1.5-flash",
+                                contents: [{
+                                    role: "user",
+                                    parts: [
+                                        { text: text || "حلل هذه الصورة بالتفصيل" },
+                                        {
+                                            inline_data: {
+                                                mime_type: attachedImage.mimeType,
+                                                data: attachedImage.base64
+                                            }
+                                        }
+                                    ]
+                                }]
+                            };
+                            
+                            const res = await fetch("/.netlify/functions/chat", { 
+                                method: "POST",
+                                headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                                body: JSON.stringify(visionPayload)
+                            });
+                            
+                            if (!res.ok) {
+                                console.warn('Vision API failed (status ' + res.status + '), falling back to text-only');
+                                throw new Error('Vision API failed');
                             }
-                        } catch (e) {}
-                        throw new Error(errorMsg);
+                            
+                            const data = await res.json();
+                            if (data.candidates && data.candidates[0]) {
+                                reply = data.candidates[0].content?.parts?.[0]?.text || null;
+                            }
+                            
+                            if (!reply) throw new Error('No response from Vision API');
+                        } catch (visionError) {
+                            console.warn('Vision request failed:', visionError.message);
+                            addMessageUI("ai", "⚠️ لم يتمكن من تحليل الصورة، سأحاول الرد على نصك فقط...");
+                            reply = await sendTextOnly();
+                        }
+                        attachedImage = null;
+                    } else {
+                        reply = await sendTextOnly();
                     }
                     
-                    const data = await res.json();
                     loading.remove();
-                    
-                    let reply = null;
-                    if (isVisionRequest && data.candidates && data.candidates[0]) {
-                        reply = data.candidates[0].content?.parts?.[0]?.text || null;
-                    } else if (data.choices && data.choices[0] && data.choices[0].message) {
-                        reply = data.choices[0].message.content;
-                    } else if (data.error) {
-                        throw new Error(data.error.message || 'خطأ من السيرفر');
-                    }
-                    
                     if (reply) {
                         chat.messages.push({ role: "ai", content: reply });
                         addMessageUI("ai", reply);
