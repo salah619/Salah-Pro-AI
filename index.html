@@ -108,7 +108,7 @@
             let pdfContent = "";
             let attachedImage = null; // Store compressed image data
 
-            // Image Compression Function
+            // Image Compression Function - Optimized for API
             window.compressImage = (file) => {
                 return new Promise((resolve, reject) => {
                     const reader = new FileReader();
@@ -119,21 +119,34 @@
                             let width = img.width;
                             let height = img.height;
                             const maxSize = 1024;
+                            
+                            // Resize to fit within maxSize
                             if (width > height) {
                                 if (width > maxSize) { height = Math.round((height * maxSize) / width); width = maxSize; }
                             } else {
                                 if (height > maxSize) { width = Math.round((width * maxSize) / height); height = maxSize; }
                             }
+                            
                             canvas.width = width;
                             canvas.height = height;
                             const ctx = canvas.getContext('2d');
                             ctx.drawImage(img, 0, 0, width, height);
+                            
+                            // Convert to JPEG with quality 0.6
                             const compressed = canvas.toDataURL('image/jpeg', 0.6);
+                            
+                            // Extract raw Base64 (remove data URL prefix)
                             const base64 = compressed.split(',')[1];
+                            
+                            // Calculate size in MB
                             const sizeInMB = (base64.length * 0.75) / (1024 * 1024);
+                            
+                            console.log(`Image compressed: ${width}x${height}, Size: ${sizeInMB.toFixed(2)} MB`);
+                            
                             if (sizeInMB > 4) {
-                                reject(new Error('حجم الصورة كبير جداً بعد الضغط. يرجى اختيار صورة أصغر.'));
+                                reject(new Error('حجم الصورة كبير جداً (أكثر من 4 MB). يرجى اختيار صورة أصغر.'));
                             } else {
+                                // Return clean Base64 without prefix
                                 resolve({ base64, mimeType: 'image/jpeg', size: sizeInMB });
                             }
                         };
@@ -268,6 +281,7 @@
             window.handlePdfUpload = async (input) => {
                 const file = input.files[0];
                 if (!file) return;
+                
                 if (file.type === 'application/pdf') {
                     const status = addMessageUI("ai", "جاري قراءة PDF...");
                     try {
@@ -282,7 +296,10 @@
                         }
                         pdfContent = text;
                         status.innerHTML = "✅ تم تحميل PDF بنجاح.";
-                    } catch (e) { status.innerHTML = "❌ خطأ في الملف."; }
+                    } catch (e) { 
+                        status.innerHTML = "❌ خطأ في قراءة الملف."; 
+                        pdfContent = "";
+                    }
                 } else if (file.type.startsWith('image/')) {
                     try {
                         const status = addMessageUI("ai", "جاري ضغط الصورة...");
@@ -291,9 +308,12 @@
                         status.innerHTML = `✅ تم تحميل الصورة بنجاح (${compressed.size.toFixed(2)} MB)`;
                     } catch (e) {
                         addMessageUI("ai", `❌ ${e.message}`);
-                        attachedImage = null;
+                        attachedImage = null; // Ensure state is reset
                     }
                 }
+                
+                // Clear file input
+                input.value = "";
             };
 
             window.sendMessage = async () => {
@@ -319,38 +339,56 @@
                 const loading = addMessageUI("ai", '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>');
                 
                 try {
-                    let payload = {
-                        model: "gpt-4o-mini",
-                        messages: []
-                    };
+                    let payload = {};
                     
-                    // Build messages with vision support if image is attached
+                    // SEPARATE LOGIC: Text-only vs Vision
                     if (attachedImage) {
-                        payload.messages.push({
-                            role: "user",
-                            content: [
-                                { type: "text", text: text || "حلل هذه الصورة" },
-                                { type: "image_url", image_url: { url: `data:${attachedImage.mimeType};base64,${attachedImage.base64}` } }
-                            ]
-                        });
-                        attachedImage = null; // Clear after sending
+                        // Vision API payload for image analysis
+                        payload = {
+                            model: "gpt-4o-mini",
+                            messages: [{
+                                role: "user",
+                                content: [
+                                    { type: "text", text: text || "حلل هذه الصورة" },
+                                    { type: "image_url", image_url: { url: `data:${attachedImage.mimeType};base64,${attachedImage.base64}` } }
+                                ]
+                            }]
+                        };
+                        attachedImage = null; // Clear after building payload
                     } else {
-                        payload.messages = [
-                            { role: "system", content: "أنت Pro AI، مساعد ذكي طوره صلاح الوافي." },
-                            ...chat.messages.map(m => ({ role: m.role === "ai" ? "assistant" : "user", content: m.content }))
-                        ];
+                        // Text-only payload (standard chat)
+                        payload = {
+                            model: "llama-3.3-70b-versatile",
+                            messages: [
+                                { role: "system", content: "أنت Pro AI، مساعد ذكي طوره المهندس صلاح الوافي. رد بطريقة ودية ومفيدة." },
+                                ...chat.messages.map(m => ({
+                                    role: m.role === "ai" ? "assistant" : "user",
+                                    content: m.content
+                                }))
+                            ]
+                        };
                     }
                     
+                    // Send request with proper headers
                     const res = await fetch("/.netlify/functions/chat", { 
                         method: "POST",
-                        headers: { "Content-Type": "application/json" },
+                        headers: { 
+                            "Content-Type": "application/json",
+                            "Accept": "application/json"
+                        },
                         body: JSON.stringify(payload)
                     });
+                    
+                    // Handle response
+                    if (!res.ok) {
+                        const errorData = await res.text();
+                        throw new Error(`استجابة السيرفر: ${res.status}`);
+                    }
                     
                     const data = await res.json();
                     loading.remove();
                     
-                    if (data.choices && data.choices[0]) {
+                    if (data.choices && data.choices[0] && data.choices[0].message) {
                         const reply = data.choices[0].message.content;
                         chat.messages.push({ role: "ai", content: reply });
                         addMessageUI("ai", reply);
@@ -361,9 +399,9 @@
                         throw new Error('استجابة غير متوقعة');
                     }
                 } catch (e) {
-                    console.error('Send error:', e);
+                    console.error('Send message error:', e);
                     loading.remove();
-                    addMessageUI("ai", `❌ خطأ: ${e.message}\n\nيرجى المحاولة مرة أخرى أو التأكد من إعدادات API.`);
+                    addMessageUI("ai", `❌ خطأ في الاتصال: ${e.message}\n\nيرجى التأكد من اتصالك بالإنترنت وإعدادات API.`);
                     attachedImage = null; // Reset state on error
                 } finally {
                     sendBtn.disabled = false;
