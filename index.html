@@ -331,7 +331,7 @@
                             ]
                         };
                         
-                        const res = await fetch("/.netlify/functions/chat", { 
+                        const res = await fetch("https://salah-pro-ai-api.YOUR_SUBDOMAIN.workers.dev", { 
                             method: "POST",
                             headers: { "Content-Type": "application/json", "Accept": "application/json" },
                             body: JSON.stringify(textPayload)
@@ -366,7 +366,7 @@
                                 }]
                             };
                             
-                            const res = await fetch("/.netlify/functions/chat", { 
+                            const res = await fetch("https://salah-pro-ai-api.YOUR_SUBDOMAIN.workers.dev", { 
                                 method: "POST",
                                 headers: { "Content-Type": "application/json", "Accept": "application/json" },
                                 body: JSON.stringify(visionPayload)
