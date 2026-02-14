@@ -166,138 +166,115 @@
                 }
             };
 
-            window.copyText = async (text, btn) => {
-                try {
-                    await navigator.clipboard.writeText(text);
-                    const old = btn.innerHTML;
-                    btn.innerHTML = '✅ تم النسخ';
-                    btn.classList.add('copied');
-                    setTimeout(() => { btn.innerHTML = old; btn.classList.remove('copied'); }, 2000);
-                } catch (e) { alert('فشل النسخ'); }
+            window.handlePdfUpload = async (input) => {
+                if (!input.files[0]) return;
+                const file = input.files[0];
+                if (file.type.startsWith('image/')) {
+                    try {
+                        attachedImage = await window.compressImage(file);
+                        console.log('Image attached:', attachedImage.size.toFixed(2), 'MB');
+                    } catch (e) {
+                        alert(e.message);
+                    }
+                }
+                input.value = '';
+            };
+
+            window.newChat = () => {
+                const id = Date.now();
+                chatHistory.push({ id, title: 'محادثة جديدة', messages: [] });
+                currentId = id;
+                localStorage.setItem("chats", JSON.stringify(chatHistory));
+                localStorage.setItem("currentChatId", currentId);
+                renderHistory();
+                renderChat();
+                overlay.classList.remove('active');
+                if (window.innerWidth <= 1024) toggleSidebar();
+            };
+
+            window.toggleSidebar = () => {
+                document.getElementById('sidebar').classList.toggle('open');
+                overlay.classList.toggle('active');
+            };
+
+            window.renderHistory = () => {
+                historyList.innerHTML = chatHistory.map(c => `<div class="p-2 rounded cursor-pointer hover:bg-gray-700 ${c.id === currentId ? 'bg-gray-700' : ''}" onclick="switchChat(${c.id})">${c.title}</div>`).join('');
+            };
+
+            window.switchChat = (id) => {
+                currentId = id;
+                localStorage.setItem("currentChatId", currentId);
+                renderHistory();
+                renderChat();
+                overlay.classList.remove('active');
+                if (window.innerWidth <= 1024) toggleSidebar();
+            };
+
+            window.saveChats = () => localStorage.setItem("chats", JSON.stringify(chatHistory));
+
+            window.renderChat = () => {
+                chatWindow.innerHTML = '';
+                const chat = chatHistory.find(c => c.id === currentId);
+                if (!chat || !chat.messages.length) {
+                    chatWindow.innerHTML = '<div id="welcome" class="m-auto text-center opacity-40"><div class="text-6xl mb-4">✨</div><h2 class="text-2xl font-bold">مرحباً بك في Pro AI</h2><p class="text-sm mt-2">بواسطة صلاح الوافي</p></div>';
+                    return;
+                }
+                chat.messages.forEach(m => addMessageUI(m.role, m.content, false));
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+            };
+
+            window.addMessageUI = (role, content, scroll = true) => {
+                const welcome = document.getElementById('welcome');
+                if (welcome) welcome.remove();
+                const div = document.createElement('div');
+                div.className = role === 'user' ? 'message-user' : 'message-ai';
+                div.innerHTML = role === 'ai' ? (typeof marked !== 'undefined' ? marked.parse(content) : content) : content;
+                chatWindow.appendChild(div);
+                if (scroll) chatWindow.scrollTop = chatWindow.scrollHeight;
+                if (role === 'ai') {
+                    const actions = document.createElement('div');
+                    actions.className = 'msg-actions';
+                    actions.innerHTML = `<button class="msg-btn" onclick="speakText('${content.replace(/'/g, "\\'")}', this)">🔈</button><button class="msg-btn" onclick="copyText('${content.replace(/'/g, "\\'")}', this)">📋</button>`;
+                    div.appendChild(actions);
+                }
+                return div;
+            };
+
+            window.copyText = (text, btn) => {
+                navigator.clipboard.writeText(text);
+                btn.textContent = '✓ تم النسخ';
+                btn.classList.add('copied');
+                setTimeout(() => { btn.textContent = '📋'; btn.classList.remove('copied'); }, 2000);
             };
 
             window.downloadPDF = () => {
                 const chat = chatHistory.find(c => c.id === currentId);
-                if (!chat || !chat.messages.length) return alert("لا توجد محادثة!");
-                const container = document.createElement('div');
-                container.style.cssText = 'padding: 40px; color: black; background: white; font-family: Cairo, sans-serif; direction: rtl;';
-                container.innerHTML = `<div style="border-bottom: 3px solid #7c3aed; padding-bottom: 20px; margin-bottom: 30px; text-align: center;">
-                    <h1 style="color: #7c3aed; margin: 0; font-size: 24px;">سجل محادثة Pro AI</h1>
-                    <p style="color: #666; font-size: 12px;">التاريخ: ${new Date().toLocaleDateString('ar-SA')}</p>
-                </div><div id="pdf-body"></div>
-                <div style="border-top: 1px solid #ddd; padding-top: 20px; margin-top: 30px; text-align: center; color: #666; font-size: 12px;">
-                    <div>تم إنشاء هذا التقرير بواسطة <span style="direction: ltr; unicode-bidi: embed; display: inline-block; font-weight: bold;">Pro AI</span></div>
-                    <div style="margin-top: 5px; font-weight: bold; color: #333;">ENG. SALAH AL-WAFI</div>
-                </div>`;
-                const body = container.querySelector('#pdf-body');
+                if (!chat || !chat.messages.length) { alert('لا توجد محادثة لتحميلها'); return; }
+                let html = '<div style="direction: rtl; text-align: right; font-family: Arial, sans-serif; padding: 20px;"><h1>سجل محادثة Pro AI - المهندس صلاح الوافي</h1><hr>';
                 chat.messages.forEach(m => {
-                    const div = document.createElement('div');
-                    div.style.cssText = `margin-bottom: 20px; padding: 15px; border-radius: 8px; ${m.role === 'user' ? 'background: #f0f0f0; border-right: 4px solid #3b82f6;' : 'background: #f3f0ff; border-right: 4px solid #7c3aed;'}`;
-                    const name = m.role === 'user' ? '👤 أنت' : '<span style="direction: ltr; unicode-bidi: embed; display: inline-block;">Pro AI</span> 🤖';
-                    div.innerHTML = `<div style="font-weight: bold; margin-bottom: 8px;">${name}</div><div style="font-size: 13px;">${m.content}</div>`;
-                    body.appendChild(div);
+                    html += `<div style="margin: 15px 0; padding: 10px; background: ${m.role === 'user' ? '#e0e0e0' : '#f0f0f0'}; border-radius: 8px;"><strong>${m.role === 'user' ? 'أنت' : 'Pro AI'}:</strong> ${m.content}</div>`;
                 });
-                html2pdf().set({ margin: 10, filename: 'سجل_محادثة.pdf', html2canvas: { scale: 2 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } }).from(container).save();
+                html += '<hr><div style="margin-top: 30px; text-align: center; font-size: 12px; color: #666;">تم إنشاء هذا التقرير بواسطة Pro AI<br><strong>ENG. SALAH AL-WAFI</strong></div></div>';
+                const opt = { margin: 10, filename: 'chat-report.pdf', image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' } };
+                html2pdf().set(opt).from(html).save();
             };
 
             window.clearCurrentChat = () => {
-                if (confirm("مسح المحادثة؟")) {
-                    const chat = chatHistory.find(c => c.id === currentId);
-                    if (chat) { chat.messages = []; saveChats(); renderChat(); }
+                if (confirm('هل تريد مسح هذه المحادثة؟')) {
+                    const idx = chatHistory.findIndex(c => c.id === currentId);
+                    if (idx !== -1) chatHistory.splice(idx, 1);
+                    currentId = chatHistory.length > 0 ? chatHistory[0].id : null;
+                    if (!currentId) newChat();
+                    localStorage.setItem("chats", JSON.stringify(chatHistory));
+                    localStorage.setItem("currentChatId", currentId);
+                    renderHistory();
+                    renderChat();
                 }
-            };
-
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (SpeechRecognition) {
-                const rec = new SpeechRecognition();
-                rec.lang = 'ar-SA';
-                let active = false;
-                voiceBtn.onclick = () => active ? rec.stop() : rec.start();
-                rec.onstart = () => { active = true; voiceBtn.classList.add('mic-active'); userInput.placeholder = "جاري الاستماع..."; };
-                rec.onend = () => { active = false; voiceBtn.classList.remove('mic-active'); userInput.placeholder = "اسألني عن أي شيء..."; };
-                rec.onresult = (e) => { userInput.value += e.results[0][0].transcript; userInput.style.height = 'auto'; userInput.style.height = userInput.scrollHeight + 'px'; };
-            }
-
-            window.toggleSidebar = () => { document.getElementById('sidebar').classList.toggle('open'); overlay.classList.toggle('active'); };
-            const saveChats = () => { localStorage.setItem("chats", JSON.stringify(chatHistory)); localStorage.setItem("currentChatId", currentId); };
-            window.newChat = () => { const id = Date.now(); chatHistory.unshift({ id, title: "محادثة جديدة", messages: [] }); currentId = id; saveChats(); renderHistory(); renderChat(); if (window.innerWidth < 1024) toggleSidebar(); };
-            
-            const renderHistory = () => {
-                historyList.innerHTML = chatHistory.length ? "" : '<div class="text-center opacity-40">لا توجد محادثات</div>';
-                chatHistory.forEach(c => {
-                    const d = document.createElement("div");
-                    d.className = `p-3 rounded-lg cursor-pointer transition-all flex justify-between items-center group ${c.id === currentId ? "bg-purple-600/20 text-white border border-purple-500/30" : "hover:bg-gray-800 text-gray-400"}`;
-                    d.innerHTML = `<span class="truncate flex-1">${c.title}</span><button class="opacity-0 group-hover:opacity-100 text-red-500 px-2" onclick="deleteChat(event, ${c.id})">×</button>`;
-                    d.onclick = () => { currentId = c.id; saveChats(); renderHistory(); renderChat(); if (window.innerWidth < 1024) toggleSidebar(); };
-                    historyList.appendChild(d);
-                });
-            };
-
-            window.deleteChat = (e, id) => { e.stopPropagation(); chatHistory = chatHistory.filter(c => c.id !== id); if (currentId === id) currentId = chatHistory.length ? chatHistory[0].id : null; saveChats(); renderHistory(); renderChat(); };
-
-            const renderChat = () => {
-                chatWindow.innerHTML = "";
-                const chat = chatHistory.find(c => c.id === currentId);
-                if (!chat || !chat.messages.length) { chatWindow.innerHTML = `<div class="m-auto text-center opacity-40"><div class="text-6xl mb-4">🚀</div><h2 class="text-2xl font-bold">أهلاً بك، كيف أساعدك؟</h2></div>`; return; }
-                chat.messages.forEach(m => addMessageUI(m.role, m.content));
-            };
-
-            const addMessageUI = (role, text) => {
-                const div = document.createElement("div");
-                div.className = role === "user" ? "message-user" : "message-ai";
-                if (role === "ai") {
-                    const clean = text.replace(/<\/?[^>]+(>|$)/g, "");
-                    div.innerHTML = `<div class="msg-content">${typeof marked !== 'undefined' ? marked.parse(text) : text}</div>
-                        <div class="msg-actions">
-                            <span class="msg-btn" onclick="speakText(\`${clean.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`, this)">🔈</span>
-                            <span class="msg-btn" onclick="copyText(\`${text.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`, this)">📋</span>
-                        </div>`;
-                    if (typeof hljs !== 'undefined') div.querySelectorAll('pre code').forEach(b => hljs.highlightElement(b));
-                } else { div.textContent = text; }
-                chatWindow.appendChild(div);
-                chatWindow.scrollTop = chatWindow.scrollHeight;
-                return div;
-            };
-
-            window.handlePdfUpload = async (input) => {
-                const file = input.files[0];
-                if (!file) return;
-                
-                if (file.type === 'application/pdf') {
-                    const status = addMessageUI("ai", "جاري قراءة PDF...");
-                    try {
-                        const buffer = await file.arrayBuffer();
-                        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-                        const pdf = await pdfjsLib.getDocument({data: buffer}).promise;
-                        let text = "";
-                        for (let i = 1; i <= pdf.numPages; i++) {
-                            const page = await pdf.getPage(i);
-                            const content = await page.getTextContent();
-                            text += content.items.map(item => item.str).join(" ") + " ";
-                        }
-                        pdfContent = text;
-                        status.innerHTML = "✅ تم تحميل PDF بنجاح.";
-                    } catch (e) { 
-                        status.innerHTML = "❌ خطأ في قراءة الملف."; 
-                        pdfContent = "";
-                    }
-                } else if (file.type.startsWith('image/')) {
-                    try {
-                        const status = addMessageUI("ai", "جاري ضغط الصورة...");
-                        const compressed = await compressImage(file);
-                        attachedImage = compressed;
-                        status.innerHTML = `✅ تم تحميل الصورة بنجاح (${compressed.size.toFixed(2)} MB)`;
-                    } catch (e) {
-                        addMessageUI("ai", `❌ ${e.message}`);
-                        attachedImage = null;
-                    }
-                }
-                input.value = "";
             };
 
             window.sendMessage = async () => {
                 const text = userInput.value.trim();
-                if (!text && !pdfContent && !attachedImage) return;
+                if (!text) return;
                 if (!currentId) newChat();
                 const chat = chatHistory.find(c => c.id === currentId);
                 if (!chat.messages.length) chat.title = text.substring(0, 25);
@@ -317,99 +294,90 @@
                 const loading = addMessageUI("ai", '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>');
                 
                 try {
-                    let reply = null;
-                    
-                    const sendTextOnly = async () => {
-                        const textPayload = {
-                            model: "llama-3.3-70b-versatile",
-                            messages: [
-                                { role: "system", content: "أنت Pro AI، مساعد ذكي طوره المهندس صلاح الوافي. رد بطريقة ودية ومفيدة وموثوقة." },
-                                ...chat.messages.map(m => ({
-                                    role: m.role === "ai" ? "assistant" : "user",
-                                    content: m.content
-                                }))
-                            ]
-                        };
-                        
-                        const res = await fetch("https://salah-pro-ai-api.YOUR_SUBDOMAIN.workers.dev", { 
-                            method: "POST",
-                            headers: { "Content-Type": "application/json", "Accept": "application/json" },
-                            body: JSON.stringify(textPayload)
-                        });
-                        
-                        if (!res.ok) throw new Error(`خطأ: ${res.status}`);
-                        const data = await res.json();
-                        
-                        if (data.choices && data.choices[0] && data.choices[0].message) {
-                            return data.choices[0].message.content;
-                        } else if (data.error) {
-                            throw new Error(data.error.message || 'خطأ من السيرفر');
-                        }
-                        throw new Error('لم تحتوِ الاستجابة على نص صحيح');
+                    const textPayload = {
+                        model: "llama-3.3-70b-versatile",
+                        messages: [
+                            { role: "system", content: "أنت Pro AI، مساعد ذكي طوره المهندس صلاح الوافي. رد بطريقة ودية ومفيدة وموثوقة." },
+                            ...chat.messages.map(m => ({
+                                role: m.role === "ai" ? "assistant" : "user",
+                                content: m.content
+                            }))
+                        ],
+                        stream: true
                     };
                     
-                    if (attachedImage) {
-                        try {
-                            const visionPayload = {
-                                model: "gemini-1.5-flash",
-                                contents: [{
-                                    role: "user",
-                                    parts: [
-                                        { text: text || "حلل هذه الصورة بالتفصيل" },
-                                        {
-                                            inline_data: {
-                                                mime_type: attachedImage.mimeType,
-                                                data: attachedImage.base64
-                                            }
-                                        }
-                                    ]
-                                }]
-                            };
-                            
-                            const res = await fetch("https://salah-pro-ai-api.YOUR_SUBDOMAIN.workers.dev", { 
-                                method: "POST",
-                                headers: { "Content-Type": "application/json", "Accept": "application/json" },
-                                body: JSON.stringify(visionPayload)
-                            });
-                            
-                            if (!res.ok) {
-                                console.warn('Vision API failed (status ' + res.status + '), falling back to text-only');
-                                throw new Error('Vision API failed');
-                            }
-                            
-                            const data = await res.json();
-                            if (data.candidates && data.candidates[0]) {
-                                reply = data.candidates[0].content?.parts?.[0]?.text || null;
-                            }
-                            
-                            if (!reply) throw new Error('No response from Vision API');
-                        } catch (visionError) {
-                            console.warn('Vision request failed:', visionError.message);
-                            addMessageUI("ai", "⚠️ لم يتمكن من تحليل الصورة، سأحاول الرد على نصك فقط...");
-                            reply = await sendTextOnly();
-                        }
-                        attachedImage = null;
-                    } else {
-                        reply = await sendTextOnly();
-                    }
+                    const res = await fetch("https://crimson-dust-fb55.mr-salah2019.workers.dev", { 
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(textPayload)
+                    });
+                    
+                    if (!res.ok) throw new Error(`خطأ: ${res.status}`);
                     
                     loading.remove();
-                    if (reply) {
-                        chat.messages.push({ role: "ai", content: reply });
-                        addMessageUI("ai", reply);
+                    const messageDiv = addMessageUI("ai", "");
+                    const reader = res.body.getReader();
+                    const decoder = new TextDecoder();
+                    let fullText = '';
+                    
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        
+                        const chunk = decoder.decode(value, { stream: true });
+                        const lines = chunk.split('\n');
+                        
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const json = JSON.parse(line.slice(6));
+                                    if (json.choices && json.choices[0] && json.choices[0].delta && json.choices[0].delta.content) {
+                                        fullText += json.choices[0].delta.content;
+                                        messageDiv.innerHTML = typeof marked !== 'undefined' ? marked.parse(fullText) : fullText;
+                                        chatWindow.scrollTop = chatWindow.scrollHeight;
+                                    }
+                                } catch (e) {}
+                            }
+                        }
+                    }
+                    
+                    if (fullText) {
+                        chat.messages.push({ role: "ai", content: fullText });
                         saveChats();
+                        messageDiv.innerHTML = '';
+                        const actions = document.createElement('div');
+                        actions.className = 'msg-actions';
+                        actions.innerHTML = `<button class="msg-btn" onclick="speakText('${fullText.replace(/'/g, "\\'")}', this)">🔈</button><button class="msg-btn" onclick="copyText('${fullText.replace(/'/g, "\\'")}', this)">📋</button>`;
+                        messageDiv.appendChild(actions);
+                        const content = document.createElement('div');
+                        content.innerHTML = typeof marked !== 'undefined' ? marked.parse(fullText) : fullText;
+                        messageDiv.insertBefore(content, actions);
                     } else {
                         throw new Error('لم تحتوِ الاستجابة على نص صحيح');
                     }
                 } catch (e) {
                     console.error('Send message error:', e);
                     loading.remove();
-                    addMessageUI("ai", `❌ خطأ في الاتصال:\n${e.message}\n\nيرجى التأكد من:\n• اتصالك بالإنترنت\n• إعدادات API صحيحة\n• أن حجم الصورة ليس كبيراً جداً`);
+                    addMessageUI("ai", `❌ خطأ في الاتصال:\n${e.message}`);
                     attachedImage = null;
                 } finally {
                     sendBtn.disabled = false;
                 }
             };
+
+            voiceBtn.addEventListener('click', () => {
+                const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+                recognition.lang = 'ar-SA';
+                recognition.start();
+                voiceBtn.classList.add('mic-active');
+                recognition.onresult = (event) => {
+                    const transcript = Array.from(event.results).map(r => r[0].transcript).join('');
+                    userInput.value = transcript;
+                    userInput.style.height = 'auto';
+                    userInput.style.height = userInput.scrollHeight + 'px';
+                };
+                recognition.onend = () => voiceBtn.classList.remove('mic-active');
+            });
 
             userInput.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } };
             renderHistory(); renderChat();
