@@ -3,18 +3,24 @@ addEventListener('fetch', event => {
 });
 
 async function handleRequest(request) {
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  };
+
   // Handle CORS preflight requests
   if (request.method === 'OPTIONS') {
-    return handleOptions(request);
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
   if (request.method !== 'POST') {
-    return new Response('Method Not Allowed', { status: 405, headers: { 'Allow': 'POST', 'Access-Control-Allow-Origin': '*' } });
+    return new Response('Method Not Allowed', { status: 405, headers: { ...corsHeaders, 'Allow': 'POST' } });
   }
 
   const groqApiKey = GROQ_API_KEY; // Access the environment variable
   if (!groqApiKey) {
-    return new Response('GROQ_API_KEY is not set', { status: 500 });
+    return new Response('GROQ_API_KEY is not set', { status: 500, headers: corsHeaders });
   }
 
   try {
@@ -32,7 +38,7 @@ async function handleRequest(request) {
 
     // Ensure there's at least one message
     if (groqMessages.length === 0) {
-      return new Response('No messages provided', { status: 400 });
+      return new Response('No messages provided', { status: 400, headers: corsHeaders });
     }
 
     const groqPayload = {
@@ -53,7 +59,7 @@ async function handleRequest(request) {
     if (!groqResponse.ok) {
       const errorText = await groqResponse.text();
       console.error('Groq API Error:', groqResponse.status, errorText);
-      return new Response(`Groq API Error: ${groqResponse.status} - ${errorText}`, { status: groqResponse.status, headers: { 'Access-Control-Allow-Origin': '*' } });
+      return new Response(`Groq API Error: ${groqResponse.status} - ${errorText}`, { status: groqResponse.status, headers: corsHeaders });
     }
 
     // Stream the response back to the client
@@ -63,22 +69,12 @@ async function handleRequest(request) {
     return new Response(readable, {
       headers: {
         'Content-Type': groqResponse.headers.get('Content-Type'),
-        'Access-Control-Allow-Origin': '*'
+        ...corsHeaders // Add CORS headers to the streaming response
       }
     });
 
   } catch (error) {
     console.error('Worker error:', error);
-    return new Response(`Worker error: ${error.message}`, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
+    return new Response(`Worker error: ${error.message}`, { status: 500, headers: corsHeaders });
   }
-}
-
-function handleOptions(request) {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Max-Age': '86400', // 24 hours
-  };
-  return new Response(null, { status: 204, headers });
 }
