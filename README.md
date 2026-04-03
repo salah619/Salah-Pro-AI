@@ -3,6 +3,8 @@
 ![Backend](https://img.shields.io/badge/Backend-Cloudflare_Workers-blue.svg)
 ![AI](https://img.shields.io/badge/AI-Groq_Llama3-green.svg)
 
+[🌐 Live Demo](https://salah-pro-ai.pages.dev)
+
 ## 📌 Overview
 **Salah Pro AI** is a professional web-based AI interface. Unlike bot-based systems, this project provides a clean web UI hosted on **Cloudflare Pages**, utilizing **Cloudflare Workers** as a secure proxy to interact with the **Groq API**.
 
@@ -25,6 +27,11 @@ Detailed setup instructions for the Cloudflare Worker and environment variables 
 *   **Serverless**: Cloudflare Workers.
 *   **AI Engine**: Groq API (Llama 3.3/3.2).
 *   **Security**: Environment Variable Isolation.
+## 📱 واجهة الموقع (Interface Showcase)
+<p align="center">
+  <img src="screenshots/SalahProAI1.jpg" width="300" alt="Salah Pro AI HomePage" />
+  <img src="screenshots/SalahProAI2.jpg" width="300" alt="Salah Pro AI Menu" />
+</p>
 
 ---
 *Developed by: **Eng. Salah Al-Wafi** 🧑‍💻*
