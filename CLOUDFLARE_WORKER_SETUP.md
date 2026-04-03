@@ -127,5 +127,3 @@ curl -X POST https://salah-pro-ai-api.YOUR_SUBDOMAIN.workers.dev \
 
 ---
 
-**تم إنشاؤه بواسطة:** Manus AI  
-**التاريخ:** 2025
